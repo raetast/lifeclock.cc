@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,18 +12,20 @@
   </style>
   <link rel="stylesheet" href="css/styles.css">
 </head>
+
 <body>
   <main class="page-shell">
     <section class="form-shell">
       <h1>See where you are in life</h1>
-      <p class="form-subcopy">Enter your name and date of birth to map your life so far. Your personal info is not saved.</p>
+      <p class="form-subcopy">Enter your name and date of birth to map your life so far.<br />Your personal info is not
+        saved.</p>
       <form id="dob-form">
         <div class="form-row">
           <div class="field">
             <input type="text" id="name" placeholder="Your name" aria-label="Your name" required>
           </div>
           <div class="field">
-            <input type="date" id="dob" aria-label="Date of birth" required>
+            <input type="date" id="dob" aria-label="Date of birth" autocomplete="bday" required>
           </div>
         </div>
         <div class="actions">
@@ -35,6 +38,7 @@
       <div class="clock-heading-group">
         <h1 class="section-title" id="life-clock-heading">My Life Clock</h1>
         <h2 class="section-title clock-readout-heading" id="clock-readout">--:--</h2>
+
       </div>
       <section class="clock-panel" id="clock-panel" hidden>
         <div class="clock-face">
@@ -42,12 +46,39 @@
           <div class="clock-hand minute" id="minute-hand"></div>
           <div class="clock-center"></div>
         </div>
+        <button type="button" class="secondary preview-btn" id="preview-clock-btn">
+          Preview
+        </button>
+        <button type="button" class="share-btn" id="share-clock-btn">
+          <span aria-hidden="true" class="share-icon" role="img"></span>
+          Share
+        </button>
+        <div class="share-preview-holder" id="clock-preview"></div>
         <p class="caption" id="clock-caption"></p>
         <section class="life-grid card" id="life-grid" hidden>
-          <button type="button" class="print-btn" id="print-btn">Print</button>
-          <h1 class="life-title" id="life-calendar-heading"></h1>
-          <h1 class="life-title" id="weeks-lived-heading"></h1>
-          <div class="life-boxes" id="life-boxes"></div>
+          <div class="life-grid-inner">
+            <div class="life-header">
+              <div class="life-titles">
+                <h1 class="life-title" id="life-calendar-heading"></h1>
+                <h3 class="life-title" id="weeks-lived-heading"></h3>
+              </div>
+              <div class="life-actions">
+                <button type="button" class="secondary preview-btn" id="preview-grid-btn">
+                  Preview
+                </button>
+                <button type="button" class="share-btn" id="share-grid-btn">
+                  <span aria-hidden="true" class="share-icon" role="img"></span>
+                  Share
+                </button>
+                <button type="button" class="print-btn" id="print-btn">
+                  <span aria-hidden="true" class="print-icon" role="img"></span>
+                  Print
+                </button>
+              </div>
+            </div>
+            <div class="life-boxes" id="life-boxes"></div>
+            <div class="share-preview-holder" id="grid-preview"></div>
+          </div>
         </section>
       </section>
     </section>
@@ -61,4 +92,5 @@
 
   <script src="js/main.js"></script>
 </body>
+
 </html>
