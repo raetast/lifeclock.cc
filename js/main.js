@@ -4,6 +4,7 @@ const form = document.getElementById('dob-form');
 const clockPanel = document.getElementById('clock-panel');
 const hourHand = document.getElementById('hour-hand');
 const minuteHand = document.getElementById('minute-hand');
+const dayNightDisk = document.getElementById('day-night-disk');
 const clockReadout = document.getElementById('clock-readout');
 const clockCaption = document.getElementById('clock-caption');
 const weeksLivedHeading = document.getElementById('weeks-lived-heading');
@@ -15,9 +16,12 @@ const lifeBoxes = document.getElementById('life-boxes');
 const weekTooltip = document.getElementById('week-tooltip');
 const printBtn = document.getElementById('print-btn');
 const shareClockBtn = document.getElementById('share-clock-btn');
+const clockShareMenu = document.getElementById('clock-share-menu');
+const clockSharePanel = document.getElementById('clock-share-panel');
 const shareGridBtn = document.getElementById('share-grid-btn');
-const previewClockBtn = document.getElementById('preview-clock-btn');
-const previewGridBtn = document.getElementById('preview-grid-btn');
+const gridShareMenu = document.getElementById('grid-share-menu');
+const gridSharePanel = document.getElementById('grid-share-panel');
+const previewClockBtn = document.getElementById('download-clock-btn');
 const clockPreviewHolder = document.getElementById('clock-preview');
 const gridPreviewHolder = document.getElementById('grid-preview');
 const formShell = document.querySelector('.form-shell');
@@ -133,6 +137,10 @@ function updateClock(ratio) {
 
   hourHand.style.transform = `translate(-50%, 0) rotate(${hourAngle}deg)`;
   minuteHand.style.transform = `translate(-50%, 0) rotate(${minuteAngle}deg)`;
+  if (dayNightDisk) {
+    const dayAngle = ((hours + minutes / 60) / 24) * 360;
+    dayNightDisk.style.setProperty('--day-night-rotation', `${dayAngle}deg`);
+  }
 
   const hh = hours.toString().padStart(2, '0');
   const mm = minutes.toString().padStart(2, '0');
@@ -217,17 +225,27 @@ function updateLifeGrid(ageYears, dobDate) {
   );
   buildLifeBoxes(desiredYears);
   const showBeyond = weeksLived > expectancyWeeks;
+  const rootStyles = getComputedStyle(document.documentElement);
+  const boxSize = parseFloat(rootStyles.getPropertyValue('--life-box-size')) || 15;
+  const boxGap = parseFloat(rootStyles.getPropertyValue('--life-box-gap')) || 3;
+  const cellSize = boxSize + boxGap;
+  const filledRows = Math.max(1, Math.ceil(weeksLived / WEEKS_PER_YEAR));
+  const gradientHeight = filledRows * cellSize - boxGap;
 
   Array.from(lifeBoxes.children).forEach((row, rowIndex) => {
     const boxes = Array.from(row.children);
     boxes.forEach((box, weekIndex) => {
       const globalWeekIndex = rowIndex * WEEKS_PER_YEAR + weekIndex + 1;
       box.hidden = false;
+      box.style.removeProperty('--filled-grad-height');
+      box.style.removeProperty('--filled-grad-offset');
       box.classList.remove('filled', 'beyond');
       box.classList.add('upcoming');
       if (globalWeekIndex <= weeksLived) {
         box.classList.remove('upcoming');
         box.classList.add('filled');
+        box.style.setProperty('--filled-grad-height', `${gradientHeight}px`);
+        box.style.setProperty('--filled-grad-offset', `${-rowIndex * cellSize}px`);
       } else if (globalWeekIndex > expectancyWeeks) {
         if (!showBeyond) {
           box.hidden = true;
@@ -523,10 +541,13 @@ async function shareCanvas(canvas, filename, button) {
 }
 
 function previewCanvas(canvas, target) {
-  if (!canvas) return;
+  if (!canvas) return false;
   const holder = target || document.body;
   const existing = holder.querySelector('.share-preview');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+    return false;
+  }
   const img = document.createElement('img');
   img.className = 'share-preview';
   img.src = canvas.toDataURL('image/png');
@@ -535,6 +556,7 @@ function previewCanvas(canvas, target) {
   img.style.marginTop = '16px';
   holder.appendChild(img);
   if (holder.scrollIntoView) holder.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return true;
 }
 
 
@@ -634,35 +656,124 @@ function guardShare(button) {
   return true;
 }
 
+function buildClockShareText() {
+  const heading = lastClockState ? lastClockState.heading : 'My life in hours';
+  const readout = lastClockState ? lastClockState.readout : '';
+  return readout ? `${heading} — ${readout}` : heading;
+}
+
+function buildGridShareText() {
+  if (!lastGridStats) return 'My life in weeks';
+  return `${lastGridStats.title || 'My life in weeks'} — ${lastGridStats.weeksLived.toLocaleString()} weeks`;
+}
+
+function openShareUrl(url) {
+  window.open(url, '_blank', 'noopener');
+}
+
+function toggleShareMenu(panel, forceOpen) {
+  if (!panel) return;
+  const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : panel.hidden;
+  panel.hidden = !shouldOpen;
+}
+
 if (shareClockBtn) {
-  shareClockBtn.addEventListener('click', async () => {
+  shareClockBtn.addEventListener('click', () => {
     applyQaDefaults();
-    if (!guardShare(shareClockBtn)) return;
-    if (!lastClockState) {
-      alert('Nothing to share yet—try submitting first.');
-      shareClockBtn.disabled = false;
-      shareClockBtn.classList.remove('loading');
+    if (!document.body.classList.contains('has-results')) {
+      alert('Submit your info first to generate a share image.');
       return;
     }
-    const canvas = await buildClockShareCanvas(lastClockState);
-    await shareCanvas(canvas, 'life-clock.png', shareClockBtn);
+    if (!lastClockState) {
+      alert('Nothing to share yet—try submitting first.');
+      return;
+    }
+    toggleShareMenu(clockSharePanel);
   });
 }
 
 if (shareGridBtn) {
-  shareGridBtn.addEventListener('click', async () => {
+  shareGridBtn.addEventListener('click', () => {
     applyQaDefaults();
-    if (!guardShare(shareGridBtn)) return;
+    if (!document.body.classList.contains('has-results')) {
+      alert('Submit your info first to generate a share image.');
+      return;
+    }
     if (!lastGridStats) {
       alert('Nothing to share yet—try submitting first.');
-      shareGridBtn.disabled = false;
-      shareGridBtn.classList.remove('loading');
+      return;
+    }
+    toggleShareMenu(gridSharePanel);
+  });
+}
+
+function handleShareMenuClick(event) {
+  const button = event.target.closest('.share-menu-item');
+  if (!button) return;
+  const panel = button.closest('.share-menu-panel');
+  if (!panel) return;
+  const source = panel.dataset.shareSource;
+  const target = button.dataset.shareTarget;
+  const shareUrl = encodeURIComponent(window.location.href);
+
+  if (source === 'clock') {
+    if (!lastClockState) {
+      alert('Nothing to share yet—try submitting first.');
+      toggleShareMenu(panel, false);
+      return;
+    }
+    buildClockShareCanvas(lastClockState).then((canvas) => {
+      const shareText = encodeURIComponent(buildClockShareText());
+      if (target === 'download' || target === 'instagram') {
+        downloadCanvas(canvas, 'life-clock-9x16.png');
+      } else if (target === 'x') {
+        openShareUrl(`https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`);
+      } else if (target === 'threads') {
+        openShareUrl(`https://www.threads.net/intent/post?text=${shareText}%20${shareUrl}`);
+      }
+    });
+  } else if (source === 'grid') {
+    if (!lastGridStats) {
+      alert('Nothing to share yet—try submitting first.');
+      toggleShareMenu(panel, false);
       return;
     }
     const canvas = buildGridShareCanvas(lastGridStats);
-    await shareCanvas(canvas, 'life-calendar.png', shareGridBtn);
-  });
+    const shareText = encodeURIComponent(buildGridShareText());
+    if (target === 'download' || target === 'instagram') {
+      downloadCanvas(canvas, 'life-grid-9x16.png');
+    } else if (target === 'x') {
+      openShareUrl(`https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`);
+    } else if (target === 'threads') {
+      openShareUrl(`https://www.threads.net/intent/post?text=${shareText}%20${shareUrl}`);
+    }
+  }
+  toggleShareMenu(panel, false);
 }
+
+if (clockSharePanel) {
+  clockSharePanel.addEventListener('click', handleShareMenuClick);
+}
+
+if (gridSharePanel) {
+  gridSharePanel.addEventListener('click', handleShareMenuClick);
+}
+
+window.addEventListener('click', (event) => {
+  if (clockShareMenu && clockSharePanel && !clockSharePanel.hidden && !clockShareMenu.contains(event.target)) {
+    toggleShareMenu(clockSharePanel, false);
+  }
+  if (gridShareMenu && gridSharePanel && !gridSharePanel.hidden && !gridShareMenu.contains(event.target)) {
+    toggleShareMenu(gridSharePanel, false);
+  }
+});
+
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    toggleShareMenu(clockSharePanel, false);
+    toggleShareMenu(gridSharePanel, false);
+  }
+});
 
 if (previewClockBtn) {
   previewClockBtn.addEventListener('click', async () => {
@@ -679,19 +790,28 @@ if (previewClockBtn) {
   });
 }
 
-if (previewGridBtn) {
-  previewGridBtn.addEventListener('click', () => {
-    applyQaDefaults();
-    if (!document.body.classList.contains('has-results')) {
-      renderFromDob(dobInput.value);
-    }
-    if (!lastGridStats) {
-      alert('Nothing to preview yet—submit first.');
-      return;
-    }
-    const canvas = buildGridShareCanvas(lastGridStats);
-    previewCanvas(canvas, gridPreviewHolder);
-  });
+
+function initBlobWiggle() {
+  const blobs = Array.from(document.querySelectorAll('.bg-blobs .blob'));
+  if (!blobs.length) return;
+
+  const randomBetween = (min, max) => Math.random() * (max - min) + min;
+  const update = () => {
+    blobs.forEach((blob) => {
+      const x = randomBetween(-160, 160);
+      const y = randomBetween(-120, 120);
+      const scale = randomBetween(0.9, 1.6);
+      const duration = randomBetween(1200, 2200);
+
+      blob.style.setProperty('--blob-x', `${x}px`);
+      blob.style.setProperty('--blob-y', `${y}px`);
+      blob.style.setProperty('--blob-scale', scale.toFixed(3));
+      blob.style.transitionDuration = `${Math.round(duration)}ms`;
+    });
+  };
+
+  update();
+  setInterval(update, 1800);
 }
 
 window.addEventListener('resize', () => {
@@ -701,6 +821,7 @@ window.addEventListener('resize', () => {
 });
 
 updateNameHeadings();
+initBlobWiggle();
 
 if (QA_MODE) {
   applyQaDefaults();

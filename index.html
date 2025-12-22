@@ -7,6 +7,7 @@
   <title>Start Now</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Zalando+Sans:ital,wght@0,200..900;1,200..900&display=swap');
   </style>
@@ -14,6 +15,11 @@
 </head>
 
 <body>
+  <div class="bg-blobs" aria-hidden="true">
+    <span class="blob blob-a"></span>
+    <span class="blob blob-b"></span>
+    <span class="blob blob-c"></span>
+  </div>
   <main class="page-shell">
     <section class="form-shell">
       <h1>See where you are in life</h1>
@@ -41,43 +47,87 @@
 
       </div>
       <section class="clock-panel" id="clock-panel" hidden>
-        <div class="clock-face">
-          <div class="clock-hand hour" id="hour-hand"></div>
-          <div class="clock-hand minute" id="minute-hand"></div>
-          <div class="clock-center"></div>
+        <div class="clock-face-wrap">
+          <div class="clock-face">
+            <div class="day-night-indicator" aria-hidden="true">
+              <div class="day-night-mask">
+                <div class="day-night-disk" id="day-night-disk">
+                  <span class="night-icon" aria-hidden="true">🌜</span>
+                  <span class="day-icon" aria-hidden="true">🌞</span>
+                  <div class="cloud-orbit cloud-orbit-back" aria-hidden="true">
+                    <span class="cloud-icon">☁️</span>
+                    <span class="cloud-icon cloud-icon-opposite">☁️</span>
+                  </div>
+                  <div class="cloud-orbit cloud-orbit-front" aria-hidden="true">
+                    <span class="cloud-icon">☁️</span>
+                    <span class="cloud-icon cloud-icon-opposite">☁️</span>
+                  </div>
+                  <div class="night-stars" aria-hidden="true">
+                    <span class="star"></span>
+                    <span class="star"></span>
+                    <span class="star"></span>
+                    <span class="star"></span>
+                    <span class="star"></span>
+                  </div>
+                </div>
+              </div>
+              <div class="day-night-center" aria-hidden="true"></div>
+            </div>
+            <div class="clock-hand hour" id="hour-hand"></div>
+            <div class="clock-hand minute" id="minute-hand"></div>
+            <div class="clock-center"></div>
+          </div>
         </div>
-        <button type="button" class="secondary preview-btn" id="preview-clock-btn">
-          Preview
-        </button>
-        <button type="button" class="share-btn" id="share-clock-btn">
-          <span aria-hidden="true" class="share-icon" role="img"></span>
-          Share
-        </button>
+        <div class="clock-actions">
+          <div class="share-menu" id="clock-share-menu">
+            <button type="button" class="secondary share-btn" id="share-clock-btn">
+              <span aria-hidden="true" class="share-icon" role="img"></span>
+              Share
+            </button>
+            <div class="share-menu-panel" id="clock-share-panel" data-share-source="clock" hidden>
+              <button type="button" class="secondary share-menu-item" data-share-target="download">
+                <span aria-hidden="true" class="download-icon" role="img"></span>
+                9:16 Image
+              </button>
+              <button type="button" class="secondary share-menu-item" data-share-target="instagram">Instagram</button>
+              <button type="button" class="secondary share-menu-item" data-share-target="x">X</button>
+              <button type="button" class="secondary share-menu-item" data-share-target="threads">Threads</button>
+            </div>
+          </div>
+        </div>
         <div class="share-preview-holder" id="clock-preview"></div>
         <p class="caption" id="clock-caption"></p>
         <section class="life-grid card" id="life-grid" hidden>
           <div class="life-grid-inner">
-            <div class="life-header">
-              <div class="life-titles">
-                <h1 class="life-title" id="life-calendar-heading"></h1>
-                <h3 class="life-title" id="weeks-lived-heading"></h3>
+              <div class="life-header">
+                <div class="life-titles">
+                  <h1 class="life-title" id="life-calendar-heading"></h1>
+                  <h3 class="life-title" id="weeks-lived-heading"></h3>
+                </div>
+                <div class="life-actions">
+                  <div class="share-menu" id="grid-share-menu">
+                    <button type="button" class="secondary share-btn" id="share-grid-btn">
+                      <span aria-hidden="true" class="share-icon" role="img"></span>
+                      Share
+                    </button>
+                    <div class="share-menu-panel" id="grid-share-panel" data-share-source="grid" hidden>
+                      <button type="button" class="secondary share-menu-item" data-share-target="download">
+                        <span aria-hidden="true" class="download-icon" role="img"></span>
+                        9:16 Image
+                      </button>
+                      <button type="button" class="secondary share-menu-item" data-share-target="instagram">Instagram</button>
+                      <button type="button" class="secondary share-menu-item" data-share-target="x">X</button>
+                      <button type="button" class="secondary share-menu-item" data-share-target="threads">Threads</button>
+                    </div>
+                  </div>
+                  <button type="button" class="secondary print-btn" id="print-btn">
+                    <span aria-hidden="true" class="print-icon" role="img"></span>
+                    Print
+                  </button>
+                </div>
               </div>
-              <div class="life-actions">
-                <button type="button" class="secondary preview-btn" id="preview-grid-btn">
-                  Preview
-                </button>
-                <button type="button" class="share-btn" id="share-grid-btn">
-                  <span aria-hidden="true" class="share-icon" role="img"></span>
-                  Share
-                </button>
-                <button type="button" class="print-btn" id="print-btn">
-                  <span aria-hidden="true" class="print-icon" role="img"></span>
-                  Print
-                </button>
-              </div>
-            </div>
-            <div class="life-boxes" id="life-boxes"></div>
-            <div class="share-preview-holder" id="grid-preview"></div>
+              <div class="life-boxes" id="life-boxes"></div>
+              <div class="share-preview-holder" id="grid-preview"></div>
           </div>
         </section>
       </section>
