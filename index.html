@@ -79,55 +79,57 @@
           </div>
         </div>
         <div class="clock-actions">
-          <div class="share-menu" id="clock-share-menu">
-            <button type="button" class="secondary share-btn" id="share-clock-btn">
-              <span aria-hidden="true" class="share-icon" role="img"></span>
-              Share
+          <div class="share-menu-list" id="clock-share-panel" data-share-source="clock" data-static="true">
+            <button type="button" class="secondary share-menu-item" data-share-target="download">
+              <span aria-hidden="true" class="download-icon" role="img"></span>
+              9:16 <span aria-hidden="true" class="image-icon" role="img"></span>
             </button>
-            <div class="share-menu-panel" id="clock-share-panel" data-share-source="clock" hidden>
-              <button type="button" class="secondary share-menu-item" data-share-target="download">
-                <span aria-hidden="true" class="download-icon" role="img"></span>
-                9:16 Image
-              </button>
-              <button type="button" class="secondary share-menu-item" data-share-target="instagram">Instagram</button>
-              <button type="button" class="secondary share-menu-item" data-share-target="x">X</button>
-              <button type="button" class="secondary share-menu-item" data-share-target="threads">Threads</button>
-            </div>
+            <button type="button" class="secondary share-menu-item" data-share-target="instagram" aria-label="Instagram">
+              <span aria-hidden="true" class="instagram-icon" role="img"></span>
+            </button>
+            <button type="button" class="secondary share-menu-item" data-share-target="x" aria-label="X">
+              <span aria-hidden="true" class="x-icon" role="img"></span>
+            </button>
+            <button type="button" class="secondary share-menu-item" data-share-target="threads" aria-label="Threads">
+              <span aria-hidden="true" class="threads-icon" role="img"></span>
+            </button>
           </div>
         </div>
-        <div class="share-preview-holder" id="clock-preview"></div>
         <p class="caption" id="clock-caption"></p>
         <section class="life-grid card" id="life-grid" hidden>
           <div class="life-grid-inner">
               <div class="life-header">
-                <div class="life-titles">
-                  <h1 class="life-title" id="life-calendar-heading"></h1>
-                  <h3 class="life-title" id="weeks-lived-heading"></h3>
-                </div>
                 <div class="life-actions">
-                  <div class="share-menu" id="grid-share-menu">
-                    <button type="button" class="secondary share-btn" id="share-grid-btn">
-                      <span aria-hidden="true" class="share-icon" role="img"></span>
-                      Share
+                  <div class="share-menu-list" id="grid-share-panel" data-share-source="grid" data-static="true">
+                    <button type="button" class="secondary share-menu-item" data-share-target="download">
+                      <span aria-hidden="true" class="download-icon" role="img"></span>
+                      9:16 <span aria-hidden="true" class="image-icon" role="img"></span>
                     </button>
-                    <div class="share-menu-panel" id="grid-share-panel" data-share-source="grid" hidden>
-                      <button type="button" class="secondary share-menu-item" data-share-target="download">
-                        <span aria-hidden="true" class="download-icon" role="img"></span>
-                        9:16 Image
-                      </button>
-                      <button type="button" class="secondary share-menu-item" data-share-target="instagram">Instagram</button>
-                      <button type="button" class="secondary share-menu-item" data-share-target="x">X</button>
-                      <button type="button" class="secondary share-menu-item" data-share-target="threads">Threads</button>
-                    </div>
+                    <button type="button" class="secondary share-menu-item" data-share-target="instagram" aria-label="Instagram">
+                      <span aria-hidden="true" class="instagram-icon" role="img"></span>
+                    </button>
+                    <button type="button" class="secondary share-menu-item" data-share-target="x" aria-label="X">
+                      <span aria-hidden="true" class="x-icon" role="img"></span>
+                    </button>
+                    <button type="button" class="secondary share-menu-item" data-share-target="threads" aria-label="Threads">
+                      <span aria-hidden="true" class="threads-icon" role="img"></span>
+                    </button>
                   </div>
                   <button type="button" class="secondary print-btn" id="print-btn">
                     <span aria-hidden="true" class="print-icon" role="img"></span>
                     Print
                   </button>
                 </div>
+                <div class="life-titles">
+                  <h1 class="life-title" id="life-calendar-heading"></h1>
+                  <h3 class="life-title" id="weeks-lived-heading"></h3>
+                </div>
               </div>
               <div class="life-boxes" id="life-boxes"></div>
-              <div class="share-preview-holder" id="grid-preview"></div>
+              <div class="life-footer">
+                <h3 class="life-footer-left">Where am I in life?</h3>
+                <h3 class="life-footer-right">#loremipsum</h3>
+              </div>
           </div>
         </section>
       </section>

@@ -15,15 +15,8 @@ const lifeGrid = document.getElementById('life-grid');
 const lifeBoxes = document.getElementById('life-boxes');
 const weekTooltip = document.getElementById('week-tooltip');
 const printBtn = document.getElementById('print-btn');
-const shareClockBtn = document.getElementById('share-clock-btn');
-const clockShareMenu = document.getElementById('clock-share-menu');
 const clockSharePanel = document.getElementById('clock-share-panel');
-const shareGridBtn = document.getElementById('share-grid-btn');
-const gridShareMenu = document.getElementById('grid-share-menu');
 const gridSharePanel = document.getElementById('grid-share-panel');
-const previewClockBtn = document.getElementById('download-clock-btn');
-const clockPreviewHolder = document.getElementById('clock-preview');
-const gridPreviewHolder = document.getElementById('grid-preview');
 const formShell = document.querySelector('.form-shell');
 
 const today = new Date();
@@ -46,8 +39,8 @@ let lastClockState = null;
 let clockFaceImagePromise = null;
 // QA toggle: set to false to restore normal behavior
 const QA_MODE = true;
-const QA_FAKE_DOB = '1990-01-01';
-const QA_FAKE_NAME = 'QA User';
+const QA_FAKE_DOB = '1985-04-24';
+const QA_FAKE_NAME = 'David';
 
 if (QA_MODE && form) {
   // Disable native validation gating so submit still fires during QA.
@@ -138,7 +131,7 @@ function updateClock(ratio) {
   hourHand.style.transform = `translate(-50%, 0) rotate(${hourAngle}deg)`;
   minuteHand.style.transform = `translate(-50%, 0) rotate(${minuteAngle}deg)`;
   if (dayNightDisk) {
-    const dayAngle = ((hours + minutes / 60) / 24) * 360;
+    const dayAngle = ((hours + minutes / 60) / 24) * 360 - 270;
     dayNightDisk.style.setProperty('--day-night-rotation', `${dayAngle}deg`);
   }
 
@@ -656,15 +649,26 @@ function guardShare(button) {
   return true;
 }
 
-function buildClockShareText() {
-  const heading = lastClockState ? lastClockState.heading : 'My life in hours';
-  const readout = lastClockState ? lastClockState.readout : '';
-  return readout ? `${heading} — ${readout}` : heading;
+function buildClockShareText(includeEmoji = false) {
+  return buildSocialShareText(includeEmoji);
 }
 
-function buildGridShareText() {
+function buildGridShareText(includeEmoji = false) {
   if (!lastGridStats) return 'My life in weeks';
-  return `${lastGridStats.title || 'My life in weeks'} — ${lastGridStats.weeksLived.toLocaleString()} weeks`;
+  const name = nameInput?.value.trim() || 'My';
+  const weeks = lastGridStats.weeksLived.toLocaleString();
+  const host = window.location.host || 'startnow.life';
+  const emoji = includeEmoji ? '🗓️ ' : '';
+  return `${emoji}${name} is in week ${weeks}.\nCheck yours at ${host}.`;
+}
+
+function buildSocialShareText(includeEmoji = false) {
+  const name = possessiveName();
+  const label = name || 'My';
+  const readout = lastClockState ? lastClockState.readout : 'xx:xx';
+  const host = window.location.host || 'startnow.life';
+  const emoji = includeEmoji ? '⏰ ' : '';
+  return `${label} life clock reads ${emoji}${readout}.\nCheck yours at ${host}.`;
 }
 
 function openShareUrl(url) {
@@ -673,44 +677,15 @@ function openShareUrl(url) {
 
 function toggleShareMenu(panel, forceOpen) {
   if (!panel) return;
+  if (panel.dataset.static === 'true') return;
   const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : panel.hidden;
   panel.hidden = !shouldOpen;
-}
-
-if (shareClockBtn) {
-  shareClockBtn.addEventListener('click', () => {
-    applyQaDefaults();
-    if (!document.body.classList.contains('has-results')) {
-      alert('Submit your info first to generate a share image.');
-      return;
-    }
-    if (!lastClockState) {
-      alert('Nothing to share yet—try submitting first.');
-      return;
-    }
-    toggleShareMenu(clockSharePanel);
-  });
-}
-
-if (shareGridBtn) {
-  shareGridBtn.addEventListener('click', () => {
-    applyQaDefaults();
-    if (!document.body.classList.contains('has-results')) {
-      alert('Submit your info first to generate a share image.');
-      return;
-    }
-    if (!lastGridStats) {
-      alert('Nothing to share yet—try submitting first.');
-      return;
-    }
-    toggleShareMenu(gridSharePanel);
-  });
 }
 
 function handleShareMenuClick(event) {
   const button = event.target.closest('.share-menu-item');
   if (!button) return;
-  const panel = button.closest('.share-menu-panel');
+  const panel = button.closest('.share-menu-list');
   if (!panel) return;
   const source = panel.dataset.shareSource;
   const target = button.dataset.shareTarget;
@@ -723,7 +698,7 @@ function handleShareMenuClick(event) {
       return;
     }
     buildClockShareCanvas(lastClockState).then((canvas) => {
-      const shareText = encodeURIComponent(buildClockShareText());
+      const shareText = encodeURIComponent(buildClockShareText(target === 'x'));
       if (target === 'download' || target === 'instagram') {
         downloadCanvas(canvas, 'life-clock-9x16.png');
       } else if (target === 'x') {
@@ -739,7 +714,7 @@ function handleShareMenuClick(event) {
       return;
     }
     const canvas = buildGridShareCanvas(lastGridStats);
-    const shareText = encodeURIComponent(buildGridShareText());
+    const shareText = encodeURIComponent(buildGridShareText(target === 'x'));
     if (target === 'download' || target === 'instagram') {
       downloadCanvas(canvas, 'life-grid-9x16.png');
     } else if (target === 'x') {
@@ -760,35 +735,16 @@ if (gridSharePanel) {
 }
 
 window.addEventListener('click', (event) => {
-  if (clockShareMenu && clockSharePanel && !clockSharePanel.hidden && !clockShareMenu.contains(event.target)) {
-    toggleShareMenu(clockSharePanel, false);
-  }
-  if (gridShareMenu && gridSharePanel && !gridSharePanel.hidden && !gridShareMenu.contains(event.target)) {
+  if (gridSharePanel && !gridSharePanel.hidden && !gridSharePanel.contains(event.target)) {
     toggleShareMenu(gridSharePanel, false);
   }
 });
 
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
-    toggleShareMenu(clockSharePanel, false);
     toggleShareMenu(gridSharePanel, false);
   }
 });
-
-if (previewClockBtn) {
-  previewClockBtn.addEventListener('click', async () => {
-    applyQaDefaults();
-    if (!document.body.classList.contains('has-results')) {
-      renderFromDob(dobInput.value);
-    }
-    if (!lastClockState) {
-      alert('Nothing to preview yet—submit first.');
-      return;
-    }
-    const canvas = await buildClockShareCanvas(lastClockState);
-    previewCanvas(canvas, clockPreviewHolder);
-  });
-}
 
 
 function initBlobWiggle() {
