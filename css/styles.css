@@ -632,7 +632,18 @@ body.has-results .clock-wrap {
   inset: 0;
   border-radius: 50%;
   overflow: hidden;
-  clip-path: inset(0 0 50% 0);
+  transform: rotate(180deg);
+  transform-origin: center;
+  -webkit-mask-image: conic-gradient(
+    transparent 0deg 105deg,
+    #000 105deg 255deg,
+    transparent 255deg 360deg
+  );
+  mask-image: conic-gradient(
+    transparent 0deg 105deg,
+    #000 105deg 255deg,
+    transparent 255deg 360deg
+  );
 }
 
 /* .card {
