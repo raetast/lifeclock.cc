@@ -17,6 +17,7 @@ const weekTooltip = document.getElementById('week-tooltip');
 const printBtn = document.getElementById('print-btn');
 const clockSharePanel = document.getElementById('clock-share-panel');
 const gridSharePanel = document.getElementById('grid-share-panel');
+const resultsSharePanel = document.getElementById('results-share-panel');
 const formShell = document.querySelector('.form-shell');
 
 const today = new Date();
@@ -37,6 +38,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 let lastGridStats = null;
 let lastClockState = null;
 let clockFaceImagePromise = null;
+let lastDobDate = null;
+const BASE_LIFE_BOX_SIZE = 15;
+const BASE_LIFE_BOX_GAP = 2;
+const SHOW_SHARE_PREVIEW = true;
+let lastShareSource = 'clock';
 // QA toggle: set to false to restore normal behavior
 const QA_MODE = true;
 const QA_FAKE_DOB = '1985-04-24';
@@ -117,6 +123,82 @@ function getCssVar(name, fallback) {
   return value ? value.trim() : fallback;
 }
 
+function hexToRgba(hex, alpha) {
+  const normalized = hex.replace('#', '');
+  if (normalized.length !== 6) return hex;
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function drawCanvasBackground(ctx, width, height) {
+  const a1 = getCssVar('--bg-a1', '#f3f7ff');
+  const a2 = getCssVar('--bg-a2', '#d8e7f6');
+  const b1 = getCssVar('--bg-b1', '#eef8ff');
+  const b2 = getCssVar('--bg-b2', '#cfe8f6');
+  const c1 = getCssVar('--bg-c1', '#e2f1fb');
+  const c2 = getCssVar('--bg-c2', '#c4e0f2');
+  const d1 = getCssVar('--bg-d1', '#d7ecf7');
+  const d2 = getCssVar('--bg-d2', '#b9d6ea');
+  const d3 = getCssVar('--bg-d3', '#a9c8dc');
+  const accent = getCssVar('--accent', '#33cc99');
+  const accent2 = getCssVar('--accent-2', '#f97316');
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+
+  const radius = Math.max(width, height) * 0.9;
+  const gradA = ctx.createRadialGradient(width * 0.15, height * 0.1, 0, width * 0.15, height * 0.1, radius);
+  gradA.addColorStop(0, a1);
+  gradA.addColorStop(0.3, a2);
+  gradA.addColorStop(0.62, hexToRgba(a2, 0));
+  ctx.fillStyle = gradA;
+  ctx.fillRect(0, 0, width, height);
+
+  const gradB = ctx.createRadialGradient(width * 0.85, height * 0.15, 0, width * 0.85, height * 0.15, radius);
+  gradB.addColorStop(0, b1);
+  gradB.addColorStop(0.32, b2);
+  gradB.addColorStop(0.64, hexToRgba(b2, 0));
+  ctx.fillStyle = gradB;
+  ctx.fillRect(0, 0, width, height);
+
+  const gradC = ctx.createRadialGradient(width * 0.2, height * 0.85, 0, width * 0.2, height * 0.85, radius);
+  gradC.addColorStop(0, c1);
+  gradC.addColorStop(0.34, c2);
+  gradC.addColorStop(0.66, hexToRgba(c2, 0));
+  ctx.fillStyle = gradC;
+  ctx.fillRect(0, 0, width, height);
+
+  const gradD = ctx.createRadialGradient(width * 0.8, height * 0.8, 0, width * 0.8, height * 0.8, radius);
+  gradD.addColorStop(0, d1);
+  gradD.addColorStop(0.36, d2);
+  gradD.addColorStop(0.72, d3);
+  ctx.fillStyle = gradD;
+  ctx.fillRect(0, 0, width, height);
+
+  const glowRadius = Math.max(width, height) * 0.75;
+  const glowLeft = ctx.createRadialGradient(width * 0.1, height * 0.1, 0, width * 0.1, height * 0.1, glowRadius);
+  glowLeft.addColorStop(0, hexToRgba(accent, 0.35));
+  glowLeft.addColorStop(0.6, hexToRgba(accent, 0));
+  ctx.fillStyle = glowLeft;
+  ctx.fillRect(0, 0, width, height);
+
+  const glowRight = ctx.createRadialGradient(width * 0.9, height * 0.9, 0, width * 0.9, height * 0.9, glowRadius);
+  glowRight.addColorStop(0, hexToRgba(accent2, 0.35));
+  glowRight.addColorStop(0.6, hexToRgba(accent2, 0));
+  ctx.fillStyle = glowRight;
+  ctx.fillRect(0, 0, width, height);
+}
+
+function setShareSource(source) {
+  lastShareSource = source;
+  if (resultsSharePanel) {
+    resultsSharePanel.dataset.shareSource = source;
+  }
+}
+
 function updateClock(ratio) {
   const nonNegativeRatio = Math.max(0, ratio);
   const totalMinutes = nonNegativeRatio * 24 * 60;
@@ -152,6 +234,8 @@ function updateClock(ratio) {
     readout: clockReadout ? clockReadout.textContent : '',
     hourAngle,
     minuteAngle,
+    hours,
+    minutes,
   };
 }
 
@@ -218,9 +302,7 @@ function updateLifeGrid(ageYears, dobDate) {
   );
   buildLifeBoxes(desiredYears);
   const showBeyond = weeksLived > expectancyWeeks;
-  const rootStyles = getComputedStyle(document.documentElement);
-  const boxSize = parseFloat(rootStyles.getPropertyValue('--life-box-size')) || 15;
-  const boxGap = parseFloat(rootStyles.getPropertyValue('--life-box-gap')) || 3;
+  const { boxSize, boxGap } = updateLifeBoxScale();
   const cellSize = boxSize + boxGap;
   const filledRows = Math.max(1, Math.ceil(weeksLived / WEEKS_PER_YEAR));
   const gradientHeight = filledRows * cellSize - boxGap;
@@ -265,6 +347,25 @@ function updateLifeGrid(ageYears, dobDate) {
     name: nameInput.value.trim(),
     title: lifeCalendarHeading ? lifeCalendarHeading.textContent : 'My life in weeks',
   };
+}
+
+function updateLifeBoxScale() {
+  if (!lifeBoxes) {
+    return { boxSize: BASE_LIFE_BOX_SIZE, boxGap: BASE_LIFE_BOX_GAP };
+  }
+  const container = lifeBoxes.closest('.life-grid-inner') || lifeBoxes.parentElement;
+  if (!container) {
+    return { boxSize: BASE_LIFE_BOX_SIZE, boxGap: BASE_LIFE_BOX_GAP };
+  }
+  const availableWidth = container.clientWidth;
+  const baseGridWidth = WEEKS_PER_YEAR * (BASE_LIFE_BOX_SIZE + BASE_LIFE_BOX_GAP) - BASE_LIFE_BOX_GAP;
+  const ratio = availableWidth / baseGridWidth;
+  const scale = ratio >= 0.995 ? 1 : Math.min(1, ratio);
+  const boxSize = Number((BASE_LIFE_BOX_SIZE * scale).toFixed(2));
+  const boxGap = Number((BASE_LIFE_BOX_GAP * scale).toFixed(2));
+  lifeBoxes.style.setProperty('--life-box-size', `${boxSize}px`);
+  lifeBoxes.style.setProperty('--life-box-gap', `${boxGap}px`);
+  return { boxSize, boxGap };
 }
 
 function hideTooltip() {
@@ -331,18 +432,104 @@ function drawClockHand(ctx, cx, cy, angleDeg, length, width, color) {
   ctx.restore();
 }
 
+function drawDayNightIndicator(ctx, cx, cy, faceSize, hours, minutes) {
+  if (typeof hours !== 'number' || typeof minutes !== 'number') return;
+  const indicatorSize = faceSize * (130 / 400);
+  const offsetY = faceSize * (100 / 400);
+  const centerX = cx;
+  const centerY = cy + offsetY;
+  const radius = indicatorSize / 2;
+
+  const angle = ((hours + minutes / 60) / 24) * 360 - 180;
+  const segments = 120;
+  const colors = [
+    '#0b1426',
+    '#143057',
+    '#50bdec',
+    '#8bdcff',
+    '#50bdec',
+    '#143057',
+    '#0b1426',
+  ];
+  const colorStops = [0, 60, 150, 180, 210, 300, 360];
+
+  ctx.save();
+  ctx.translate(centerX, centerY);
+  ctx.rotate((angle * Math.PI) / 180);
+
+  ctx.beginPath();
+  ctx.arc(0, 0, radius, Math.PI, 0, false);
+  ctx.closePath();
+  ctx.clip();
+
+  for (let i = 0; i < segments; i++) {
+    const startDeg = (i / segments) * 360;
+    const endDeg = ((i + 1) / segments) * 360;
+    let color = colors[colors.length - 1];
+    for (let j = 0; j < colorStops.length - 1; j++) {
+      if (startDeg >= colorStops[j] && startDeg < colorStops[j + 1]) {
+        color = colors[j];
+        break;
+      }
+    }
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.fillStyle = color;
+    ctx.arc(0, 0, radius, (startDeg * Math.PI) / 180, (endDeg * Math.PI) / 180, false);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.fillStyle = 'rgba(255, 199, 0, 0.7)';
+  const stars = [
+    { x: -radius * 0.42, y: -radius * 0.28, r: 1.6 },
+    { x: -radius * 0.22, y: -radius * 0.42, r: 1.2 },
+    { x: -radius * 0.12, y: -radius * 0.18, r: 1 },
+    { x: -radius * 0.3, y: -radius * 0.12, r: 0.8 },
+  ];
+  stars.forEach((star) => {
+    ctx.beginPath();
+    ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  const emojiFont = `${Math.round(radius * 0.38)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+  ctx.font = emojiFont;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.save();
+  ctx.rotate((90 * Math.PI) / 180);
+  ctx.fillText('🌞', radius * 0.45, 0);
+  ctx.restore();
+
+  ctx.save();
+  ctx.rotate((-90 * Math.PI) / 180);
+  ctx.fillText('🌜', -radius * 0.45, 0);
+  ctx.restore();
+
+  ctx.font = `${Math.round(radius * 0.26)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+  ctx.fillText('☁️', 0, -radius * 0.42);
+  ctx.fillText('☁️', 0, -radius * 0.1);
+
+  ctx.restore();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius * 0.16, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 async function buildClockShareCanvas(state) {
   if (!state) return null;
   const { canvas, ctx, width, height } = createBaseCanvas();
   const accent = getCssVar('--accent', '#33cc99');
   const accent2 = getCssVar('--accent-2', '#f97316');
   const text = getCssVar('--text', '#0f172a');
-  const softBg = '#fff';
-  ctx.fillStyle = softBg;
-  ctx.fillRect(0, 0, width, height);
+  drawCanvasBackground(ctx, width, height);
 
   const headingX = 120;
-  const headingY = 140;
+  const headingY = 180;
   const headingText = state.heading || 'My Life Clock';
   const headingToken = ' in hours';
   let headingLine1 = headingText;
@@ -367,16 +554,21 @@ async function buildClockShareCanvas(state) {
   ctx.fillText(state.readout || '--:--', headingX, readoutY);
 
   const cx = width / 2;
-  const cy = height / 2 + 80;
-  const radius = 320;
+  const cy = height / 2 + 220;
+  const radius = 420;
 
+  const faceSize = radius * 2;
   try {
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
     const faceImg = await loadClockFaceImage();
-    const faceSize = radius * 2;
     ctx.drawImage(faceImg, cx - faceSize / 2, cy - faceSize / 2, faceSize, faceSize);
   } catch (err) {
     console.warn('Clock face image failed to load, using fallback:', err);
   }
+  drawDayNightIndicator(ctx, cx, cy, faceSize, state.hours, state.minutes);
 
   // Redraw hands on top of face
   const hourLength = radius * 0.5;
@@ -403,11 +595,9 @@ function buildGridShareCanvas(stats) {
   const accent2 = getCssVar('--btn-hover', '#2cb386');
   const text = getCssVar('--text', '#0f172a');
   const muted = getCssVar('--muted', '#a4acb6');
-  const softBg = '#ecececff';
   const upcoming = '#eef1f4ff';
   const beyond = '#e2e8f0';
-  ctx.fillStyle = softBg;
-  ctx.fillRect(0, 0, width, height);
+  drawCanvasBackground(ctx, width, height);
 
   const cardX = 60;
   const cardY = 120;
@@ -587,10 +777,12 @@ function renderFromDob(value) {
   }
   const ageYears = calculateAgeYears(parsed);
   const dobDate = parsed;
+  lastDobDate = dobDate;
   const ratio = ageYears / lifeExpectancyYears;
   updateClock(ratio);
   updateLifeGrid(ageYears, dobDate);
   flipFormShell(true);
+  updateSharePreviewOverlay();
 }
 
 function hideVisuals() {
@@ -654,21 +846,71 @@ function buildClockShareText(includeEmoji = false) {
 }
 
 function buildGridShareText(includeEmoji = false) {
-  if (!lastGridStats) return 'My life in weeks';
-  const name = nameInput?.value.trim() || 'My';
-  const weeks = lastGridStats.weeksLived.toLocaleString();
-  const host = window.location.host || 'startnow.life';
-  const emoji = includeEmoji ? '🗓️ ' : '';
-  return `${emoji}${name} is in week ${weeks}.\nCheck yours at ${host}.`;
+  return buildSocialShareText(includeEmoji);
 }
 
 function buildSocialShareText(includeEmoji = false) {
   const name = possessiveName();
   const label = name || 'My';
   const readout = lastClockState ? lastClockState.readout : 'xx:xx';
+  const weeks = lastGridStats ? lastGridStats.weeksLived.toLocaleString() : '—';
   const host = window.location.host || 'startnow.life';
-  const emoji = includeEmoji ? '⏰ ' : '';
-  return `${label} life clock reads ${emoji}${readout}.\nCheck yours at ${host}.`;
+  const timeEmoji = includeEmoji ? '⏰ ' : '';
+  const weekEmoji = includeEmoji ? '📅 ' : '';
+  return `${label} life stats right now:\n${timeEmoji}${readout} · ${weekEmoji}Week ${weeks}\nSee yours: ${host}`;
+}
+
+function ensureSharePreviewOverlay() {
+  const existing = document.querySelector('.share-preview-overlay');
+  if (existing) return existing;
+  const overlay = document.createElement('div');
+  overlay.className = 'share-preview-overlay';
+  overlay.innerHTML = `
+    <h4>Share Preview</h4>
+    <img alt="Clock share preview" data-share-preview="clock">
+    <img alt="Life grid share preview" data-share-preview="grid">
+  `;
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+async function updateSharePreviewOverlay() {
+  if (!SHOW_SHARE_PREVIEW || !document.body.classList.contains('has-results')) return;
+  const overlay = ensureSharePreviewOverlay();
+  const clockImg = overlay.querySelector('[data-share-preview="clock"]');
+  const gridImg = overlay.querySelector('[data-share-preview="grid"]');
+  if (clockImg && lastClockState) {
+    const clockCanvas = await buildClockShareCanvas(lastClockState);
+    if (clockCanvas) clockImg.src = clockCanvas.toDataURL('image/png');
+  }
+  if (gridImg && lastGridStats) {
+    const gridCanvas = buildGridShareCanvas(lastGridStats);
+    if (gridCanvas) gridImg.src = gridCanvas.toDataURL('image/png');
+  }
+}
+
+async function copyTextToClipboard(text) {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (err) {
+    console.warn('Clipboard write failed, falling back.', err);
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'absolute';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+  const ok = document.execCommand('copy');
+  textarea.remove();
+  return ok;
 }
 
 function openShareUrl(url) {
@@ -699,8 +941,17 @@ function handleShareMenuClick(event) {
     }
     buildClockShareCanvas(lastClockState).then((canvas) => {
       const shareText = encodeURIComponent(buildClockShareText(target === 'x'));
-      if (target === 'download' || target === 'instagram') {
+      if (target === 'download') {
         downloadCanvas(canvas, 'life-clock-9x16.png');
+      } else if (target === 'instagram') {
+        if (target === 'instagram') {
+          const caption = buildClockShareText(true);
+          copyTextToClipboard(caption).then((copied) => {
+            if (copied) {
+              alert('Caption copied!');
+            }
+          });
+        }
       } else if (target === 'x') {
         openShareUrl(`https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`);
       } else if (target === 'threads') {
@@ -715,8 +966,17 @@ function handleShareMenuClick(event) {
     }
     const canvas = buildGridShareCanvas(lastGridStats);
     const shareText = encodeURIComponent(buildGridShareText(target === 'x'));
-    if (target === 'download' || target === 'instagram') {
+    if (target === 'download') {
       downloadCanvas(canvas, 'life-grid-9x16.png');
+    } else if (target === 'instagram') {
+      if (target === 'instagram') {
+        const caption = buildGridShareText(true);
+        copyTextToClipboard(caption).then((copied) => {
+          if (copied) {
+            alert('Caption copied!');
+          }
+        });
+      }
     } else if (target === 'x') {
       openShareUrl(`https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`);
     } else if (target === 'threads') {
@@ -732,6 +992,21 @@ if (clockSharePanel) {
 
 if (gridSharePanel) {
   gridSharePanel.addEventListener('click', handleShareMenuClick);
+}
+
+if (resultsSharePanel) {
+  resultsSharePanel.addEventListener('click', handleShareMenuClick);
+  setShareSource(lastShareSource);
+}
+
+if (clockPanel) {
+  clockPanel.addEventListener('click', () => setShareSource('clock'));
+  clockPanel.addEventListener('focusin', () => setShareSource('clock'));
+}
+
+if (lifeGrid) {
+  lifeGrid.addEventListener('click', () => setShareSource('grid'));
+  lifeGrid.addEventListener('focusin', () => setShareSource('grid'));
 }
 
 window.addEventListener('click', (event) => {
@@ -773,6 +1048,9 @@ function initBlobWiggle() {
 window.addEventListener('resize', () => {
   if (document.body.classList.contains('has-results')) {
     flipFormShell(true);
+    if (lastDobDate) {
+      updateLifeGrid(calculateAgeYears(lastDobDate), lastDobDate);
+    }
   }
 });
 
