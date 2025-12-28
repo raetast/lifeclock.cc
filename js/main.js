@@ -20,6 +20,7 @@ const clockSharePanel = document.getElementById("clock-share-panel");
 const gridSharePanel = document.getElementById("grid-share-panel");
 const resultsSharePanel = document.getElementById("results-share-panel");
 const formShell = document.querySelector(".form-shell");
+const gridWrap = document.querySelector(".grid-wrap");
 
 const today = new Date();
 today.setHours(0, 0, 0, 0);
@@ -40,9 +41,10 @@ let lastGridStats = null;
 let lastClockState = null;
 let clockFaceImagePromise = null;
 let lastDobDate = null;
+let cachedLifeBoxSize = null;
+let cachedLifeBoxGap = null;
 const BASE_LIFE_BOX_SIZE = 15;
 const BASE_LIFE_BOX_GAP = 2;
-const SHOW_SHARE_PREVIEW = true;
 let lastShareSource = "clock";
 // QA toggle: set to false to restore normal behavior
 const QA_MODE = true;
@@ -53,6 +55,7 @@ if (QA_MODE && form) {
   // Disable native validation gating so submit still fires during QA.
   form.noValidate = true;
 }
+
 
 async function fetchLifeExpectancy() {
   try {
@@ -281,7 +284,7 @@ function updateClock(ratio) {
   const updateNote = lifeExpectancyLastUpdate
     ? `, last update: ${lifeExpectancyLastUpdate}`
     : "";
-  clockCaption.innerHTML = `${beyondNote}Clock based on an average life expectancy of ${lifeExpectancyYears} years.<br>(${EXPECTANCY_SOURCE}${updateNote})`;
+  clockCaption.innerHTML = `${beyondNote}Visualization based on an average life expectancy of ${lifeExpectancyYears} years. (${EXPECTANCY_SOURCE}${updateNote})`;
   clockPanel.hidden = false;
   clockPanel.classList.add("is-visible");
 
@@ -418,6 +421,7 @@ function updateLifeGrid(ageYears, dobDate) {
       ? lifeCalendarHeading.textContent
       : "My life in weeks",
   };
+  // Intentionally skip print-specific scaling to avoid overriding UI sizing.
 }
 
 function updateLifeBoxScale() {
@@ -815,9 +819,13 @@ async function buildClockShareCanvas(state) {
   ctx.stroke();
 
   ctx.fillStyle = text;
-  ctx.textAlign = "center";
+  ctx.textAlign = "left";
   ctx.font = '500 55px "Zalando Sans", "Helvetica Neue", sans-serif';
-  ctx.fillText("loremipsum.com", width / 2, height - 80);
+  const signatureUrl = "lifeclock.today";
+  const signatureTag = "#yourlifeclock";
+  ctx.fillText(signatureUrl, 60, height - 80);
+  ctx.textAlign = "right";
+  ctx.fillText(signatureTag, width - 60, height - 80);
   ctx.textAlign = "start";
 
   return canvas;
@@ -927,9 +935,13 @@ function buildGridShareCanvas(stats) {
 
   ctx.fillStyle = text;
   ctx.font = '500 55px "Zalando Sans", "Helvetica Neue", sans-serif';
-  const signature = "loremipsum.com";
-  const signatureWidth = ctx.measureText(signature).width;
-  ctx.fillText(signature, width - 60 - signatureWidth, height - 80);
+  const signatureUrl = "lifeclock.today";
+  const signatureTag = "#yourlifeclock";
+  ctx.textAlign = "left";
+  ctx.fillText(signatureUrl, 60, height - 80);
+  ctx.textAlign = "right";
+  ctx.fillText(signatureTag, width - 60, height - 80);
+  ctx.textAlign = "start";
 
   return canvas;
 }
@@ -1040,7 +1052,9 @@ function renderFromDob(value) {
   updateClock(ratio);
   updateLifeGrid(ageYears, dobDate);
   flipFormShell(true);
-  updateSharePreviewOverlay();
+  if (typeof window.updateSharePreviewOverlay === "function") {
+    window.updateSharePreviewOverlay();
+  }
 }
 
 function hideVisuals() {
@@ -1083,9 +1097,167 @@ dobInput.addEventListener("change", reRenderIfHasResults);
 
 if (printBtn) {
   printBtn.addEventListener("click", () => {
-    window.print();
+    downloadGridPdf();
   });
 }
+
+async function downloadGridPdf() {
+  if (!document.body.classList.contains("has-results")) {
+    alert("Submit your info first to generate the PDF.");
+    return;
+  }
+  if (!window.html2canvas || !window.jspdf) {
+    alert("PDF tools failed to load. Please refresh and try again.");
+    return;
+  }
+  const grid = document.getElementById("life-grid");
+  const gridInner = grid ? grid.querySelector(".life-grid-inner") : null;
+  if (!gridInner) return;
+  const gridWidth = gridInner.scrollWidth;
+  const gridHeight = gridInner.scrollHeight;
+  const pdfFrame = document.createElement("div");
+  pdfFrame.className = "pdf-frame";
+  const gridParent = gridInner.parentElement;
+  if (!gridParent) return;
+  gridParent.insertBefore(pdfFrame, gridInner);
+  pdfFrame.appendChild(gridInner);
+  pdfFrame.style.width = `${gridWidth + 30}px`;
+  pdfFrame.style.height = `${gridHeight + 30}px`;
+  const tenMarks = gridInner.querySelectorAll(".life-box.ten-mark.filled");
+  tenMarks.forEach((box) => {
+    if (box.querySelector(".pdf-xmark")) return;
+    const mark = document.createElement("span");
+    mark.className = "pdf-xmark";
+    mark.innerHTML =
+      "<svg viewBox='0 0 10 10' aria-hidden='true'><path d='M2 2l6 6M8 2L2 8' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg>";
+    box.appendChild(mark);
+  });
+  document.body.classList.add("pdf-exporting");
+  try {
+    await Promise.resolve();
+    if (document.fonts && document.fonts.ready) {
+      await document.fonts.ready;
+    }
+    const canvas = await window.html2canvas(pdfFrame, {
+      backgroundColor: "#ffffff",
+      scale: 3,
+      useCORS: true,
+    });
+    const { jsPDF } = window.jspdf;
+    const orientation =
+      canvas.width >= canvas.height ? "landscape" : "portrait";
+    const pdf = new jsPDF({
+      orientation,
+      unit: "px",
+      format: [
+        Math.round(canvas.width),
+        Math.round(canvas.height),
+      ],
+    });
+    pdf.addImage(
+      canvas.toDataURL("image/png"),
+      "PNG",
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+    pdf.save("life-grid.pdf");
+  } catch (err) {
+    console.error("PDF export failed:", err);
+    alert("PDF export failed. Check the console for details.");
+  } finally {
+    tenMarks.forEach((box) => {
+      const mark = box.querySelector(".pdf-xmark");
+      if (mark) mark.remove();
+    });
+    gridParent.insertBefore(gridInner, pdfFrame);
+    pdfFrame.remove();
+    document.body.classList.remove("pdf-exporting");
+  }
+}
+
+
+function refreshLifeGridScale(shouldScaleForPrint = false) {
+  if (!document.body.classList.contains("has-results")) return;
+  if (!dobInput.value.trim()) return;
+  renderFromDob(dobInput.value);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      setPrintBoxScale(shouldScaleForPrint);
+    });
+  });
+}
+
+function setPrintBoxScale(active) {
+  if (!lifeGrid || !lifeBoxes) return;
+  if (!active) {
+    lifeBoxes.style.removeProperty("--life-box-size");
+    lifeBoxes.style.removeProperty("--life-box-gap");
+    return;
+  }
+  const cols = WEEKS_PER_YEAR;
+  if (!cols) return;
+  const container =
+    lifeBoxes.closest(".life-grid-inner") || lifeBoxes.parentElement;
+  const availableWidth =
+    (container && container.clientWidth) ||
+    document.documentElement.clientWidth ||
+    lifeGrid.clientWidth;
+  if (!availableWidth) return;
+  const gapRatio = BASE_LIFE_BOX_GAP / BASE_LIFE_BOX_SIZE;
+  const sizeFromWidth = availableWidth / (cols + (cols - 1) * gapRatio);
+  const boxSize = Math.max(
+    0.5,
+    Math.min(BASE_LIFE_BOX_SIZE, sizeFromWidth)
+  );
+  const boxGap = boxSize * gapRatio;
+  lifeBoxes.style.setProperty("--life-box-size", `${boxSize.toFixed(2)}px`);
+  lifeBoxes.style.setProperty("--life-box-gap", `${boxGap.toFixed(2)}px`);
+}
+
+if (typeof window.matchMedia === "function") {
+  const printMedia = window.matchMedia("print");
+  if (typeof printMedia.addEventListener === "function") {
+    printMedia.addEventListener("change", (event) => {
+      if (event.matches) {
+        setTimeout(() => refreshLifeGridScale(true), 0);
+      } else {
+        refreshLifeGridScale(false);
+      }
+    });
+  }
+}
+
+window.addEventListener("beforeprint", () => {
+  if (lifeBoxes) {
+    cachedLifeBoxSize = lifeBoxes.style.getPropertyValue("--life-box-size");
+    cachedLifeBoxGap = lifeBoxes.style.getPropertyValue("--life-box-gap");
+  }
+  setTimeout(() => refreshLifeGridScale(true), 0);
+});
+
+window.addEventListener("afterprint", () => {
+  if (lifeBoxes) {
+    if (cachedLifeBoxSize) {
+      lifeBoxes.style.setProperty("--life-box-size", cachedLifeBoxSize);
+    } else {
+      lifeBoxes.style.removeProperty("--life-box-size");
+    }
+    if (cachedLifeBoxGap) {
+      lifeBoxes.style.setProperty("--life-box-gap", cachedLifeBoxGap);
+    } else {
+      lifeBoxes.style.removeProperty("--life-box-gap");
+    }
+  }
+  setTimeout(() => {
+    if (document.body.classList.contains("has-results") && lastDobDate) {
+      updateLifeGrid(calculateAgeYears(lastDobDate), lastDobDate);
+    } else {
+      refreshLifeGridScale(false);
+    }
+  }, 200);
+});
 
 function guardShare(button) {
   if (!document.body.classList.contains("has-results")) {
@@ -1116,36 +1288,6 @@ function buildSocialShareText(includeEmoji = false) {
   const timeEmoji = includeEmoji ? "⏰ " : "";
   const weekEmoji = includeEmoji ? "📅 " : "";
   return `${label} life stats right now:\n${timeEmoji}${readout} · ${weekEmoji}Week ${weeks}\nSee yours: ${host}`;
-}
-
-function ensureSharePreviewOverlay() {
-  const existing = document.querySelector(".share-preview-overlay");
-  if (existing) return existing;
-  const overlay = document.createElement("div");
-  overlay.className = "share-preview-overlay";
-  overlay.innerHTML = `
-    <h4>Share Preview</h4>
-    <img alt="Clock share preview" data-share-preview="clock">
-    <img alt="Life grid share preview" data-share-preview="grid">
-  `;
-  document.body.appendChild(overlay);
-  return overlay;
-}
-
-async function updateSharePreviewOverlay() {
-  if (!SHOW_SHARE_PREVIEW || !document.body.classList.contains("has-results"))
-    return;
-  const overlay = ensureSharePreviewOverlay();
-  const clockImg = overlay.querySelector('[data-share-preview="clock"]');
-  const gridImg = overlay.querySelector('[data-share-preview="grid"]');
-  if (clockImg && lastClockState) {
-    const clockCanvas = await buildClockShareCanvas(lastClockState);
-    if (clockCanvas) clockImg.src = clockCanvas.toDataURL("image/png");
-  }
-  if (gridImg && lastGridStats) {
-    const gridCanvas = buildGridShareCanvas(lastGridStats);
-    if (gridCanvas) gridImg.src = gridCanvas.toDataURL("image/png");
-  }
 }
 
 async function copyTextToClipboard(text) {

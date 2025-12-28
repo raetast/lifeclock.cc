@@ -1,231 +1,158 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Start Now</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      @import url("https://fonts.googleapis.com/css2?family=Zalando+Sans:ital,wght@0,200..900;1,200..900&display=swap");
-    </style>
-    <link rel="stylesheet" href="css/styles.css" />
-  </head>
 
-  <body>
-    <div class="bg-blobs" aria-hidden="true">
-      <span class="blob blob-a"></span>
-      <span class="blob blob-b"></span>
-      <span class="blob blob-c"></span>
-    </div>
-    <main class="page-shell">
-      <section class="form-shell">
-        <h1>See where you are in life</h1>
-        <p class="form-subcopy">
-          Enter your name and date of birth to map your life so far.<br />Your
-          personal info is not saved.
-        </p>
-        <form id="dob-form">
-          <div class="form-row">
-            <div class="field">
-              <input
-                type="text"
-                id="name"
-                placeholder="Your name"
-                aria-label="Your name"
-                required
-              />
-            </div>
-            <div class="field">
-              <input
-                type="date"
-                id="dob"
-                aria-label="Date of birth"
-                autocomplete="bday"
-                required
-              />
-            </div>
-          </div>
-          <div class="actions">
-            <button type="submit" class="primary">Submit</button>
-          </div>
-        </form>
-      </section>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Start Now</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet" />
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Zalando+Sans:ital,wght@0,200..900;1,200..900&display=swap");
+  </style>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/preview.css" />
+</head>
 
-      <section class="clock-wrap">
-        <div class="clock-heading-group">
-          <h1 class="section-title" id="life-clock-heading">My Life Clock</h1>
-          <h2 class="section-title clock-readout-heading" id="clock-readout">
-            --:--
-          </h2>
+<body>
+  <div class="bg-blobs" aria-hidden="true">
+    <span class="blob blob-a"></span>
+    <span class="blob blob-b"></span>
+    <span class="blob blob-c"></span>
+  </div>
+  <main class="page-shell">
+    <section class="form-shell">
+      <h1>Your Life Clock</h1>
+      <p class="form-subcopy">
+        Enter your name and date of birth to map your life so far and you’ll see there’s still plenty of time left to start again, anytime.<br />
+        <span class="privacy-note">Your personal info is not saved.</span>
+      </p>
+      <form id="dob-form">
+        <div class="form-row">
+          <div class="field">
+            <input type="text" id="name" placeholder="Your name" aria-label="Your name" required />
+          </div>
+          <div class="field">
+            <input type="date" id="dob" aria-label="Date of birth" autocomplete="bday" required />
+          </div>
         </div>
-        <section class="clock-panel" id="clock-panel" hidden>
-          <div class="clock-face-wrap">
-            <div class="clock-face">
-              <div class="day-night-indicator" aria-hidden="true">
-                <div class="day-night-mask">
-                  <div class="day-night-disk" id="day-night-disk">
-                    <span class="night-icon" aria-hidden="true">🌜</span>
-                    <span class="day-icon" aria-hidden="true">🌞</span>
-                    <div
-                      class="cloud-orbit cloud-orbit-back"
-                      aria-hidden="true"
-                    >
-                      <span class="cloud-icon">☁️</span>
-                      <span class="cloud-icon cloud-icon-opposite">☁️</span>
-                    </div>
-                    <div
-                      class="cloud-orbit cloud-orbit-front"
-                      aria-hidden="true"
-                    >
-                      <span class="cloud-icon">☁️</span>
-                      <span class="cloud-icon cloud-icon-opposite">☁️</span>
-                    </div>
-                    <div class="night-stars" aria-hidden="true">
-                      <span class="star"></span>
-                      <span class="star"></span>
-                      <span class="star"></span>
-                      <span class="star"></span>
-                      <span class="star"></span>
-                    </div>
+        <div class="actions">
+          <button type="submit" class="primary">Submit</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="clock-wrap">
+      <div class="clock-heading-group">
+        <h1 class="section-title" id="life-clock-heading">My Life Clock</h1>
+        <h2 class="section-title clock-readout-heading" id="clock-readout">
+          --:--
+        </h2>
+      </div>
+      <section class="clock-panel" id="clock-panel" hidden>
+        <div class="clock-face-wrap">
+          <div class="clock-face">
+            <div class="day-night-indicator" aria-hidden="true">
+              <div class="day-night-mask">
+                <div class="day-night-disk" id="day-night-disk">
+                  <span class="night-icon" aria-hidden="true">🌜</span>
+                  <span class="day-icon" aria-hidden="true">🌞</span>
+                  <div class="cloud-orbit cloud-orbit-back" aria-hidden="true">
+                    <span class="cloud-icon">☁️</span>
+                    <span class="cloud-icon cloud-icon-opposite">☁️</span>
+                  </div>
+                  <div class="cloud-orbit cloud-orbit-front" aria-hidden="true">
+                    <span class="cloud-icon">☁️</span>
+                    <span class="cloud-icon cloud-icon-opposite">☁️</span>
+                  </div>
+                  <div class="night-stars" aria-hidden="true">
+                    <span class="star"></span>
+                    <span class="star"></span>
+                    <span class="star"></span>
+                    <span class="star"></span>
+                    <span class="star"></span>
                   </div>
                 </div>
-                <div class="day-night-center" aria-hidden="true"></div>
               </div>
-              <div class="clock-hand hour" id="hour-hand"></div>
-              <div class="clock-hand minute" id="minute-hand"></div>
-              <div class="clock-center"></div>
+              <div class="day-night-center" aria-hidden="true"></div>
             </div>
+            <div class="clock-hand hour" id="hour-hand"></div>
+            <div class="clock-hand minute" id="minute-hand"></div>
+            <div class="clock-center"></div>
           </div>
-          <div class="clock-actions">
-            <div
-              class="share-menu-list"
-              id="clock-share-panel"
-              data-share-source="clock"
-              data-static="true"
-            >
-              <button
-                type="button"
-                class="secondary share-menu-item"
-                data-share-target="download"
-              >
-                <span
-                  aria-hidden="true"
-                  class="download-icon"
-                  role="img"
-                ></span>
-                9:16
-                <span aria-hidden="true" class="image-icon" role="img"></span>
-              </button>
-            </div>
+        </div>
+        <div class="clock-actions">
+          <div class="share-menu-list" id="clock-share-panel" data-share-source="clock" data-static="true">
+            <button type="button" class="secondary share-menu-item" data-share-target="download">
+              <span aria-hidden="true" class="download-icon" role="img"></span>
+              Image
+            </button>
           </div>
-          <p class="caption" id="clock-caption"></p>
-          <div class="results-share-bar" aria-label="Share results">
-            <div
-              class="share-menu-list"
-              id="results-share-panel"
-              data-share-source="clock"
-              data-static="true"
-            >
-              <button
-                type="button"
-                class="secondary share-menu-item"
-                data-share-target="instagram"
-                aria-label="Instagram"
-              >
-                <span
-                  aria-hidden="true"
-                  class="instagram-icon"
-                  role="img"
-                ></span>
-              </button>
-              <button
-                type="button"
-                class="secondary share-menu-item"
-                data-share-target="x"
-                aria-label="X"
-              >
-                <span aria-hidden="true" class="x-icon" role="img"></span>
-              </button>
-              <button
-                type="button"
-                class="secondary share-menu-item"
-                data-share-target="threads"
-                aria-label="Threads"
-              >
-                <span aria-hidden="true" class="threads-icon" role="img"></span>
-              </button>
-            </div>
+        </div>
+        <div class="results-share-bar" aria-label="Share results">
+          <h3 class="results-share-title">Share your stats</h3>
+          <div class="share-menu-list" id="results-share-panel" data-share-source="clock" data-static="true">
+            <button type="button" class="secondary share-menu-item" data-share-target="instagram"
+              aria-label="Instagram">
+              <span aria-hidden="true" class="instagram-icon" role="img"></span>
+            </button>
+            <button type="button" class="secondary share-menu-item" data-share-target="x" aria-label="X">
+              <span aria-hidden="true" class="x-icon" role="img"></span>
+            </button>
+            <button type="button" class="secondary share-menu-item" data-share-target="threads" aria-label="Threads">
+              <span aria-hidden="true" class="threads-icon" role="img"></span>
+            </button>
           </div>
-          <section class="life-grid card" id="life-grid" hidden>
-            <div class="life-grid-inner">
-              <div class="life-header">
-                <div class="life-actions">
-                  <div
-                    class="share-menu-list"
-                    id="grid-share-panel"
-                    data-share-source="grid"
-                    data-static="true"
-                  >
-                    <button
-                      type="button"
-                      class="secondary share-menu-item"
-                      data-share-target="download"
-                    >
-                      <span
-                        aria-hidden="true"
-                        class="download-icon"
-                        role="img"
-                      ></span>
-                      9:16
-                      <span
-                        aria-hidden="true"
-                        class="image-icon"
-                        role="img"
-                      ></span>
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    class="secondary print-btn"
-                    id="print-btn"
-                  >
-                    <span
-                      aria-hidden="true"
-                      class="print-icon"
-                      role="img"
-                    ></span>
-                    Print
-                  </button>
-                </div>
-                <div class="life-titles">
-                  <h1 class="life-title" id="life-calendar-heading"></h1>
-                  <h3 class="life-title" id="weeks-lived-heading"></h3>
-                </div>
-              </div>
-              <div class="life-boxes" id="life-boxes"></div>
-              <div class="life-footer">
-                <h3 class="life-footer-left">loremipsum.com</h3>
-                <h3 class="life-footer-right">#loremipsum</h3>
-              </div>
-            </div>
-          </section>
-        </section>
+        </div>
       </section>
-    </main>
+    </section>
+    <section class="grid-wrap">
+      <section class="life-grid card" id="life-grid" hidden>
+        <div class="life-grid-inner">
+          <div class="life-header">
+            <div class="life-actions">
+              <div class="share-menu-list" id="grid-share-panel" data-share-source="grid" data-static="true">
+                <button type="button" class="secondary share-menu-item" data-share-target="download">
+                  <span aria-hidden="true" class="download-icon" role="img"></span>
+                  Image
+                </button>
+              </div>
+              <button type="button" class="secondary print-btn" id="print-btn">
+                <span aria-hidden="true" class="download-icon" role="img"></span>
+                PDF
+              </button>
+            </div>
+            <div class="life-titles">
+              <h1 class="life-title" id="life-calendar-heading"></h1>
+              <h3 class="life-title" id="weeks-lived-heading"></h3>
+            </div>
+          </div>
+          <div class="life-boxes" id="life-boxes"></div>
+          <div class="life-footer">
+            <h3 class="life-footer-left">lifeclock.today</h3>
+            <h3 class="life-footer-right">#yourlifeclock</h3>
+          </div>
+        </div>
+      </section>
+    </section>
+    <p class="caption" id="clock-caption"></p>
+  </main>
 
-    <footer class="site-footer">
-      Copyright © 2025
-      <a href="http://raetast.com/" target="_blank" rel="noopener">Rætast</a>.
-      All rights reserved.
-    </footer>
+  <footer class="site-footer">
+    Copyright © 2025
+    <a href="http://raetast.com/" target="_blank" rel="noopener">Rætast</a>.
+    All rights reserved. v1.0.0
+  </footer>
 
-    <div class="week-tooltip" id="week-tooltip" hidden></div>
+  <div class="week-tooltip" id="week-tooltip" hidden></div>
 
-    <script src="js/main.js"></script>
-  </body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/preview.js"></script>
+</body>
+
 </html>

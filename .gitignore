@@ -1,2 +1,4 @@
 .DS_Store
 _design
+css/preview.css
+js/preview.js
