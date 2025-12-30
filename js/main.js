@@ -21,6 +21,9 @@ const gridSharePanel = document.getElementById("grid-share-panel");
 const resultsSharePanel = document.getElementById("results-share-panel");
 const formShell = document.querySelector(".form-shell");
 const gridWrap = document.querySelector(".grid-wrap");
+const gridFullscreenBtn = document.getElementById("grid-fullscreen-btn");
+const gridModal = document.getElementById("grid-modal");
+const gridModalContent = document.getElementById("grid-modal-content");
 
 const today = new Date();
 today.setHours(0, 0, 0, 0);
@@ -46,8 +49,8 @@ let cachedLifeBoxGap = null;
 const BASE_LIFE_BOX_SIZE = 15;
 const BASE_LIFE_BOX_GAP = 2;
 let lastShareSource = "clock";
-// QA toggle: set to false to restore normal behavior
-const QA_MODE = true;
+// QA toggle: set window.QA_MODE in js/local-config.js.
+const QA_MODE = window.QA_MODE === true;
 const QA_FAKE_DOB = "1985-04-24";
 const QA_FAKE_NAME = "David";
 
@@ -822,7 +825,7 @@ async function buildClockShareCanvas(state) {
   ctx.textAlign = "left";
   ctx.font = '500 55px "Zalando Sans", "Helvetica Neue", sans-serif';
   const signatureUrl = "lifeclock.today";
-  const signatureTag = "#yourlifeclock";
+  const signatureTag = "#mylifeclock";
   ctx.fillText(signatureUrl, 60, height - 80);
   ctx.textAlign = "right";
   ctx.fillText(signatureTag, width - 60, height - 80);
@@ -936,7 +939,7 @@ function buildGridShareCanvas(stats) {
   ctx.fillStyle = text;
   ctx.font = '500 55px "Zalando Sans", "Helvetica Neue", sans-serif';
   const signatureUrl = "lifeclock.today";
-  const signatureTag = "#yourlifeclock";
+  const signatureTag = "#mylifeclock";
   ctx.textAlign = "left";
   ctx.fillText(signatureUrl, 60, height - 80);
   ctx.textAlign = "right";
@@ -1395,6 +1398,73 @@ function handleShareMenuClick(event) {
   toggleShareMenu(panel, false);
 }
 
+function updateGridModalScale() {
+  if (!gridModal || gridModal.hidden || !gridModalContent) return;
+  const scaleWrap = gridModalContent.querySelector(".grid-modal-scale");
+  if (!scaleWrap) return;
+
+  const availableWidth = gridModalContent.clientWidth;
+  const availableHeight = gridModalContent.clientHeight;
+  const baseWidth = scaleWrap.offsetWidth;
+  const baseHeight = scaleWrap.offsetHeight;
+
+  if (!baseWidth || !baseHeight) return;
+  const scale = Math.min(
+    1,
+    availableWidth / baseWidth,
+    availableHeight / baseHeight
+  );
+  scaleWrap.style.transform = `scale(${scale.toFixed(3)})`;
+}
+
+function closeGridModal() {
+  if (!gridModal) return;
+  gridModal.hidden = true;
+  gridModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("is-modal-open");
+  if (gridModalContent) {
+    gridModalContent.innerHTML = "";
+  }
+}
+
+function openGridModal() {
+  if (!gridModal || !gridModalContent || !lifeGrid) return;
+  const gridInner = lifeGrid.querySelector(".life-grid-inner");
+  if (!gridInner) return;
+
+  const clone = gridInner.cloneNode(true);
+  const cloneActions = clone.querySelector(".life-actions");
+  if (cloneActions) {
+    cloneActions.remove();
+  }
+  const cloneTitles = clone.querySelector(".life-titles");
+  if (cloneTitles) {
+    cloneTitles.remove();
+  }
+  const cloneFooter = clone.querySelector(".life-footer");
+  if (cloneFooter) {
+    cloneFooter.remove();
+  }
+  clone.querySelectorAll(".share-preview-text").forEach((node) => node.remove());
+  clone.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
+
+  gridModalContent.innerHTML = "";
+  const scaleWrap = document.createElement("div");
+  scaleWrap.className = "grid-modal-scale";
+  scaleWrap.appendChild(clone);
+  gridModalContent.appendChild(scaleWrap);
+  gridModal.hidden = false;
+  gridModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("is-modal-open");
+
+  requestAnimationFrame(updateGridModalScale);
+
+  const closeButton = gridModal.querySelector(".grid-modal-close");
+  if (closeButton) {
+    closeButton.focus();
+  }
+}
+
 if (clockSharePanel) {
   clockSharePanel.addEventListener("click", handleShareMenuClick);
 }
@@ -1418,6 +1488,21 @@ if (lifeGrid) {
   lifeGrid.addEventListener("focusin", () => setShareSource("grid"));
 }
 
+if (gridFullscreenBtn) {
+  gridFullscreenBtn.addEventListener("click", () => {
+    openGridModal();
+  });
+}
+
+if (gridModal) {
+  gridModal.addEventListener("click", (event) => {
+    const target = event.target;
+    if (target && target.closest("[data-close=\"true\"]")) {
+      closeGridModal();
+    }
+  });
+}
+
 window.addEventListener("click", (event) => {
   if (
     gridSharePanel &&
@@ -1431,6 +1516,9 @@ window.addEventListener("click", (event) => {
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     toggleShareMenu(gridSharePanel, false);
+    if (gridModal && !gridModal.hidden) {
+      closeGridModal();
+    }
   }
 });
 
@@ -1457,6 +1545,27 @@ function initBlobWiggle() {
   setInterval(update, 1800);
 }
 
+function initShareTitleWave() {
+  const title = document.querySelector(".results-share-title");
+  if (!title) return;
+
+  const text = title.textContent ? title.textContent.trim() : "";
+  if (!text) return;
+
+  title.setAttribute("aria-label", text);
+  title.textContent = "";
+  title.classList.add("is-wave");
+
+  Array.from(text).forEach((char, index) => {
+    const span = document.createElement("span");
+    span.className = "wave-letter";
+    span.style.setProperty("--char-index", index);
+    span.textContent = char === " " ? "\u00a0" : char;
+    span.setAttribute("aria-hidden", "true");
+    title.appendChild(span);
+  });
+}
+
 window.addEventListener("resize", () => {
   if (document.body.classList.contains("has-results")) {
     flipFormShell(true);
@@ -1464,10 +1573,12 @@ window.addEventListener("resize", () => {
       updateLifeGrid(calculateAgeYears(lastDobDate), lastDobDate);
     }
   }
+  updateGridModalScale();
 });
 
 updateNameHeadings();
 initBlobWiggle();
+initShareTitleWave();
 
 if (QA_MODE) {
   applyQaDefaults();

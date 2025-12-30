@@ -25,7 +25,7 @@
   </div>
   <main class="page-shell">
     <section class="form-shell">
-      <h1>Your Life Clock</h1>
+      <h1>My Life Clock</h1>
       <p class="form-subcopy">
         Enter your name and date of birth to map your life so far and you’ll see there’s still plenty of time left to start again, anytime.<br />
         <span class="privacy-note">Your personal info is not saved.</span>
@@ -93,7 +93,7 @@
           </div>
         </div>
         <div class="results-share-bar" aria-label="Share results">
-          <h3 class="results-share-title">Share your stats</h3>
+          <h2 class="results-share-title">Share your stats</h2>
           <div class="share-menu-list" id="results-share-panel" data-share-source="clock" data-static="true">
             <button type="button" class="secondary share-menu-item" data-share-target="instagram"
               aria-label="Instagram">
@@ -124,6 +124,10 @@
                 <span aria-hidden="true" class="download-icon" role="img"></span>
                 PDF
               </button>
+              <button type="button" class="secondary" id="grid-fullscreen-btn">
+                <span aria-hidden="true" class="fullscreen-icon" role="img"></span>
+                Full view
+              </button>
             </div>
             <div class="life-titles">
               <h1 class="life-title" id="life-calendar-heading"></h1>
@@ -133,7 +137,7 @@
           <div class="life-boxes" id="life-boxes"></div>
           <div class="life-footer">
             <h3 class="life-footer-left">lifeclock.today</h3>
-            <h3 class="life-footer-right">#yourlifeclock</h3>
+            <h3 class="life-footer-right">#mylifeclock</h3>
           </div>
         </div>
       </section>
@@ -147,10 +151,18 @@
     All rights reserved. v1.0.0
   </footer>
 
+  <div class="grid-modal" id="grid-modal" hidden aria-hidden="true">
+    <div class="grid-modal-backdrop" data-close="true"></div>
+    <div class="grid-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="grid-modal-title">
+      <div class="grid-modal-content" id="grid-modal-content"></div>
+    </div>
+  </div>
+
   <div class="week-tooltip" id="week-tooltip" hidden></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="js/local-config.js"></script>
   <script src="js/main.js"></script>
   <script src="js/preview.js"></script>
 </body>
