@@ -978,7 +978,7 @@ async function downloadCanvas(canvas, filename) {
   });
 }
 
-async function shareCanvas(canvas, filename, button) {
+async function shareCanvas(canvas, filename, button, text) {
   return new Promise((resolve, reject) => {
     canvas.toBlob(async (blob) => {
       if (!blob) {
@@ -989,7 +989,7 @@ async function shareCanvas(canvas, filename, button) {
       const payload = {
         files: [file],
         title: "Life snapshot",
-        text: "My life snapshot",
+        text: text || "My life snapshot",
       };
 
       try {
@@ -1011,29 +1011,6 @@ async function shareCanvas(canvas, filename, button) {
       }
     });
   });
-}
-
-async function shareInstagramStory(canvas, filename, caption, button) {
-  try {
-    const mode = await shareCanvas(canvas, filename, button);
-    const copied = await copyTextToClipboard(caption);
-    if (mode === "shared") {
-      alert(
-        copied
-          ? "Story image opened in your share sheet. Caption copied—paste it in Instagram."
-          : "Story image opened in your share sheet. Add your caption in Instagram."
-      );
-      return;
-    }
-    alert(
-      copied
-        ? "Image downloaded. Caption copied—paste it in your Instagram story."
-        : "Image downloaded. Add your caption in Instagram."
-    );
-  } catch (err) {
-    console.warn("Instagram share failed:", err);
-    alert("Could not prepare the share image. Please try again.");
-  }
 }
 
 function previewCanvas(canvas, target) {
@@ -1374,10 +1351,14 @@ function buildSocialShareText(includeEmoji = false) {
   const label = name || "My";
   const readout = lastClockState ? lastClockState.readout : "xx:xx";
   const weeks = lastGridStats ? lastGridStats.weeksLived.toLocaleString() : "—";
-  const host = window.location.host || "startnow.life";
   const timeEmoji = includeEmoji ? "⏰ " : "";
   const weekEmoji = includeEmoji ? "📅 " : "";
-  return `${label} life stats right now:\n${timeEmoji}${readout} · ${weekEmoji}Week ${weeks}\nSee yours: ${host}`;
+  return (
+    `${label} life stats right now:\n` +
+    `${timeEmoji}${readout} · ${weekEmoji}Week ${weeks}\n` +
+    "Check yours at lifeclock.cc\n" +
+    "#mylifeclock"
+  );
 }
 
 function fileSafeName(value) {
@@ -1443,10 +1424,9 @@ function handleShareMenuClick(event) {
       const clockFilename = `${filenameBase}-lifeclock.png`;
       if (target === "download") {
         downloadCanvas(canvas, clockFilename);
-      } else if (target === "instagram") {
-        const caption = buildClockShareText(true);
+      } else if (target === "share") {
         if (!guardShare(button)) return;
-        shareInstagramStory(canvas, clockFilename, caption, button);
+        shareCanvas(canvas, clockFilename, button, buildClockShareText(true));
       } else if (target === "x") {
         openShareUrl(
           `https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`
@@ -1469,10 +1449,9 @@ function handleShareMenuClick(event) {
     const gridFilename = `${filenameBase}-lifemap.png`;
     if (target === "download") {
       downloadCanvas(canvas, gridFilename);
-    } else if (target === "instagram") {
-      const caption = buildGridShareText(true);
+    } else if (target === "share") {
       if (!guardShare(button)) return;
-      shareInstagramStory(canvas, gridFilename, caption, button);
+      shareCanvas(canvas, gridFilename, button, buildGridShareText(true));
     } else if (target === "x") {
       openShareUrl(
         `https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`

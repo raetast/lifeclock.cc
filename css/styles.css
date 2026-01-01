@@ -545,10 +545,10 @@ button {
   background: color-mix(in srgb, var(--white) 100%, transparent);
 }
 
-#results-share-panel .share-menu-item:hover .instagram-icon,
+#results-share-panel .share-menu-item:hover .share-social-icon,
 #results-share-panel .share-menu-item:hover .x-icon,
 #results-share-panel .share-menu-item:hover .threads-icon,
-#results-share-panel .share-menu-item:focus-visible .instagram-icon,
+#results-share-panel .share-menu-item:focus-visible .share-social-icon,
 #results-share-panel .share-menu-item:focus-visible .x-icon,
 #results-share-panel .share-menu-item:focus-visible .threads-icon {
   color: var(--text);
@@ -1233,7 +1233,7 @@ body.has-results .clock-wrap {
   -webkit-mask: url('../assets/image_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg') center/contain no-repeat;
 }
 
-.instagram-icon,
+.share-social-icon,
 .x-icon,
 .threads-icon {
   display: inline-block;
@@ -1243,9 +1243,9 @@ body.has-results .clock-wrap {
   color: var(--accent-4);
 }
 
-.instagram-icon {
-  mask: url('../assets/logo_ig.svg') center/contain no-repeat;
-  -webkit-mask: url('../assets/logo_ig.svg') center/contain no-repeat;
+.share-social-icon {
+  mask: url('../assets/share_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg') center/contain no-repeat;
+  -webkit-mask: url('../assets/share_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg') center/contain no-repeat;
 }
 
 .x-icon {
