@@ -27,8 +27,6 @@ today.setHours(0, 0, 0, 0);
 const MAX_AGE_YEARS = 123;
 const minAllowedYear = today.getFullYear() - MAX_AGE_YEARS;
 const minAllowedDate = new Date(`${minAllowedYear}-01-01T00:00:00`);
-dobInput.max = today.toISOString().split("T")[0];
-dobInput.min = minAllowedDate.toISOString().split("T")[0];
 
 let lifeExpectancyYears = 100;
 const EXPECTANCY_SOURCE = "World Bank global average";
@@ -117,12 +115,39 @@ function parseDob(value) {
   return null;
 }
 
+function formatDobInput(value) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  const year = digits.slice(0, 4);
+  const month = digits.slice(4, 6);
+  const day = digits.slice(6, 8);
+  let formatted = year;
+  if (month) formatted += `-${month}`;
+  if (day) formatted += `-${day}`;
+  return formatted;
+}
+
+function syncDobValue() {
+  if (!dobInput) return;
+  const formatted = formatDobInput(dobInput.value);
+  if (formatted !== dobInput.value) dobInput.value = formatted;
+  dobInput.setCustomValidity("");
+  if (!dobInput.value) return;
+  if (dobInput.value.length !== 10) {
+    dobInput.setCustomValidity("Enter a full date of birth.");
+    return;
+  }
+  const parsed = parseDob(dobInput.value);
+  if (!parsed || parsed > today || parsed < minAllowedDate) {
+    dobInput.setCustomValidity("Enter a valid date of birth.");
+  }
+}
+
 function updateNameHeadings() {
   const possessive = possessiveName();
   if (lifeClockHeading) {
     lifeClockHeading.textContent = possessive
-      ? `${possessive} life in hours`
-      : "My life in hours";
+      ? `${possessive} life clock`
+      : "My life clock";
   }
   if (lifeCalendarHeading) {
     lifeCalendarHeading.textContent = possessive
@@ -293,7 +318,7 @@ function updateClock(ratio) {
   lastClockState = {
     heading: lifeClockHeading
       ? lifeClockHeading.textContent
-      : "My life in hours",
+      : "My life clock",
     readout: clockReadout ? clockReadout.textContent : "",
     hourAngle,
     minuteAngle,
@@ -688,8 +713,8 @@ async function buildClockShareCanvas(state) {
 
   const headingX = width / 2;
   const headingY = 320;
-  const headingText = "My life in hours";
-  const headingToken = " in hours";
+  const headingText = "My life clock";
+  const headingToken = " clock";
   let headingLine1 = headingText;
   let headingLine2 = "";
   const headingTokenIndex = headingText.toLowerCase().lastIndexOf(headingToken);
@@ -821,7 +846,7 @@ async function buildClockShareCanvas(state) {
   ctx.fillStyle = text;
   ctx.textAlign = "left";
   ctx.font = '500 55px "Zalando Sans", "Helvetica Neue", sans-serif';
-  const signatureUrl = "lifeclock.today";
+  const signatureUrl = "lifeclock.cc";
   const signatureTag = "#mylifeclock";
   ctx.fillText(signatureUrl, 60, height - 80);
   ctx.textAlign = "right";
@@ -935,7 +960,7 @@ function buildGridShareCanvas(stats) {
 
   ctx.fillStyle = text;
   ctx.font = '500 55px "Zalando Sans", "Helvetica Neue", sans-serif';
-  const signatureUrl = "lifeclock.today";
+  const signatureUrl = "lifeclock.cc";
   const signatureTag = "#mylifeclock";
   ctx.textAlign = "left";
   ctx.fillText(signatureUrl, 60, height - 80);
@@ -946,15 +971,10 @@ function buildGridShareCanvas(stats) {
   return canvas;
 }
 
-function downloadCanvas(canvas, filename) {
-  canvas.toBlob((blob) => {
+async function downloadCanvas(canvas, filename) {
+  canvas.toBlob(async (blob) => {
     if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
+    await saveBlob(blob, filename, "image/png");
   });
 }
 
@@ -975,14 +995,14 @@ async function shareCanvas(canvas, filename, button) {
       try {
         if (navigator.canShare && navigator.canShare(payload)) {
           await navigator.share(payload);
-          resolve();
+          resolve("shared");
           return;
         }
         downloadCanvas(canvas, filename);
-        resolve();
+        resolve("downloaded");
       } catch (err) {
         downloadCanvas(canvas, filename);
-        reject(err);
+        resolve("downloaded");
       } finally {
         if (button) {
           button.disabled = false;
@@ -991,6 +1011,29 @@ async function shareCanvas(canvas, filename, button) {
       }
     });
   });
+}
+
+async function shareInstagramStory(canvas, filename, caption, button) {
+  try {
+    const mode = await shareCanvas(canvas, filename, button);
+    const copied = await copyTextToClipboard(caption);
+    if (mode === "shared") {
+      alert(
+        copied
+          ? "Story image opened in your share sheet. Caption copied—paste it in Instagram."
+          : "Story image opened in your share sheet. Add your caption in Instagram."
+      );
+      return;
+    }
+    alert(
+      copied
+        ? "Image downloaded. Caption copied—paste it in your Instagram story."
+        : "Image downloaded. Add your caption in Instagram."
+    );
+  } catch (err) {
+    console.warn("Instagram share failed:", err);
+    alert("Could not prepare the share image. Please try again.");
+  }
 }
 
 function previewCanvas(canvas, target) {
@@ -1032,6 +1075,7 @@ if (weekTooltip && lifeBoxes) {
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   applyQaDefaults();
+  syncDobValue();
   renderFromDob(dobInput.value);
 });
 
@@ -1068,11 +1112,14 @@ function hideVisuals() {
   updateNameHeadings();
 }
 
-dobInput.addEventListener("input", (event) => {
-  if (!dobInput.value) {
-    hideVisuals();
-  }
-});
+if (dobInput) {
+  dobInput.addEventListener("input", () => {
+    syncDobValue();
+    if (!dobInput.value) {
+      hideVisuals();
+    }
+  });
+}
 
 function reRenderIfHasResults() {
   if (!document.body.classList.contains("has-results")) return;
@@ -1084,6 +1131,7 @@ function applyQaDefaults() {
   if (!QA_MODE) return;
   if (!nameInput.value.trim()) nameInput.value = QA_FAKE_NAME;
   if (!dobInput.value.trim()) dobInput.value = QA_FAKE_DOB;
+  syncDobValue();
 }
 
 if (nameInput) {
@@ -1093,12 +1141,48 @@ if (nameInput) {
   nameInput.addEventListener("change", reRenderIfHasResults);
 }
 
-dobInput.addEventListener("change", reRenderIfHasResults);
+if (dobInput) {
+  dobInput.addEventListener("change", () => {
+    syncDobValue();
+    reRenderIfHasResults();
+  });
+}
 
 if (printBtn) {
   printBtn.addEventListener("click", () => {
     downloadGridPdf();
   });
+}
+
+async function saveBlob(blob, filename, mimeType) {
+  if (!blob) return false;
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [
+          {
+            description: mimeType === "application/pdf" ? "PDF file" : "PNG image",
+            accept: { [mimeType]: [mimeType === "application/pdf" ? ".pdf" : ".png"] },
+          },
+        ],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return true;
+    } catch (err) {
+      if (err && err.name === "AbortError") return true;
+      console.warn("Save picker failed, falling back to download:", err);
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+  return true;
 }
 
 async function downloadGridPdf() {
@@ -1162,7 +1246,13 @@ async function downloadGridPdf() {
       canvas.width,
       canvas.height
     );
-    pdf.save("life-grid.pdf");
+    const blob = pdf.output("blob");
+    const filenameBase = fileSafeName(nameInput ? nameInput.value : "");
+    await saveBlob(
+      blob,
+      `${filenameBase}-lifemap-print.pdf`,
+      "application/pdf"
+    );
   } catch (err) {
     console.error("PDF export failed:", err);
     alert("PDF export failed. Check the console for details.");
@@ -1290,6 +1380,13 @@ function buildSocialShareText(includeEmoji = false) {
   return `${label} life stats right now:\n${timeEmoji}${readout} · ${weekEmoji}Week ${weeks}\nSee yours: ${host}`;
 }
 
+function fileSafeName(value) {
+  const base = value || "my";
+  const trimmed = base.trim().toLowerCase();
+  const cleaned = trimmed.replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "");
+  return cleaned || "my";
+}
+
 async function copyTextToClipboard(text) {
   if (!text) return false;
   try {
@@ -1342,17 +1439,14 @@ function handleShareMenuClick(event) {
     }
     buildClockShareCanvas(lastClockState).then((canvas) => {
       const shareText = encodeURIComponent(buildClockShareText(target === "x"));
+      const filenameBase = fileSafeName(nameInput ? nameInput.value : "");
+      const clockFilename = `${filenameBase}-lifeclock.png`;
       if (target === "download") {
-        downloadCanvas(canvas, "life-clock-9x16.png");
+        downloadCanvas(canvas, clockFilename);
       } else if (target === "instagram") {
-        if (target === "instagram") {
-          const caption = buildClockShareText(true);
-          copyTextToClipboard(caption).then((copied) => {
-            if (copied) {
-              alert("Caption copied!");
-            }
-          });
-        }
+        const caption = buildClockShareText(true);
+        if (!guardShare(button)) return;
+        shareInstagramStory(canvas, clockFilename, caption, button);
       } else if (target === "x") {
         openShareUrl(
           `https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`
@@ -1371,17 +1465,14 @@ function handleShareMenuClick(event) {
     }
     const canvas = buildGridShareCanvas(lastGridStats);
     const shareText = encodeURIComponent(buildGridShareText(target === "x"));
+    const filenameBase = fileSafeName(nameInput ? nameInput.value : "");
+    const gridFilename = `${filenameBase}-lifemap.png`;
     if (target === "download") {
-      downloadCanvas(canvas, "life-grid-9x16.png");
+      downloadCanvas(canvas, gridFilename);
     } else if (target === "instagram") {
-      if (target === "instagram") {
-        const caption = buildGridShareText(true);
-        copyTextToClipboard(caption).then((copied) => {
-          if (copied) {
-            alert("Caption copied!");
-          }
-        });
-      }
+      const caption = buildGridShareText(true);
+      if (!guardShare(button)) return;
+      shareInstagramStory(canvas, gridFilename, caption, button);
     } else if (target === "x") {
       openShareUrl(
         `https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`

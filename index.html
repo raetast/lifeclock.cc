@@ -25,7 +25,7 @@
   </div>
   <main class="page-shell">
     <section class="form-shell">
-      <h1>My Life Clock</h1>
+      <h1>My life clock</h1>
       <p class="form-subcopy">
         Enter your name and date of birth to map your life so far and you’ll see there’s still plenty of time left to start again, anytime.<br />
         <span class="privacy-note">Your personal info is not saved.</span>
@@ -36,7 +36,8 @@
             <input type="text" id="name" placeholder="Your name" aria-label="Your name" required />
           </div>
           <div class="field">
-            <input type="date" id="dob" aria-label="Date of birth" autocomplete="bday" required />
+            <input type="text" id="dob" inputmode="numeric" pattern="[0-9-]*" maxlength="10"
+              placeholder="YYYY-MM-DD" aria-label="Date of birth" autocomplete="bday" required />
           </div>
         </div>
         <div class="actions">
@@ -132,7 +133,7 @@
           </div>
           <div class="life-boxes" id="life-boxes"></div>
           <div class="life-footer">
-            <h3 class="life-footer-left">lifeclock.today</h3>
+            <h3 class="life-footer-left">lifeclock.cc</h3>
             <h3 class="life-footer-right">#mylifeclock</h3>
           </div>
         </div>
