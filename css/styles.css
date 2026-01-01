@@ -1144,68 +1144,6 @@ body.has-results .clock-wrap {
   margin: 0;
 }
 
-body.is-modal-open {
-  overflow: hidden;
-}
-
-.grid-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.grid-modal[hidden] {
-  display: none;
-}
-
-.grid-modal-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(var(--text-rgb), 0.35);
-  backdrop-filter: blur(6px);
-}
-
-.grid-modal-dialog {
-  position: relative;
-  background: var(--white);
-  max-width: min(96vw, 1100px);
-  max-height: 92vh;
-  overflow: hidden;
-  z-index: 1;
-}
-
-.grid-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px 0;
-  gap: 12px;
-}
-
-.grid-modal-content {
-  overflow: hidden;
-  max-height: calc(92vh - 64px);
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-}
-
-.grid-modal-content .life-grid-inner {
-  width: max-content;
-}
-
-.grid-modal-scale {
-  width: max-content;
-  transform-origin: top center;
-}
-
-.grid-modal-content .life-footer {
-  padding-bottom: 8px;
-}
-
 .life-row {
   display: flex;
   flex-wrap: nowrap;
@@ -1283,15 +1221,6 @@ body.is-modal-open {
   background-color: currentColor;
   mask: url('../assets/download_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg') center/contain no-repeat;
   -webkit-mask: url('../assets/download_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg') center/contain no-repeat;
-}
-
-.fullscreen-icon {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  background-color: currentColor;
-  mask: url('../assets/fullscreen_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg') center/contain no-repeat;
-  -webkit-mask: url('../assets/fullscreen_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg') center/contain no-repeat;
 }
 
 .image-icon {

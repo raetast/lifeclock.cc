@@ -21,9 +21,6 @@ const gridSharePanel = document.getElementById("grid-share-panel");
 const resultsSharePanel = document.getElementById("results-share-panel");
 const formShell = document.querySelector(".form-shell");
 const gridWrap = document.querySelector(".grid-wrap");
-const gridFullscreenBtn = document.getElementById("grid-fullscreen-btn");
-const gridModal = document.getElementById("grid-modal");
-const gridModalContent = document.getElementById("grid-modal-content");
 
 const today = new Date();
 today.setHours(0, 0, 0, 0);
@@ -1398,73 +1395,6 @@ function handleShareMenuClick(event) {
   toggleShareMenu(panel, false);
 }
 
-function updateGridModalScale() {
-  if (!gridModal || gridModal.hidden || !gridModalContent) return;
-  const scaleWrap = gridModalContent.querySelector(".grid-modal-scale");
-  if (!scaleWrap) return;
-
-  const availableWidth = gridModalContent.clientWidth;
-  const availableHeight = gridModalContent.clientHeight;
-  const baseWidth = scaleWrap.offsetWidth;
-  const baseHeight = scaleWrap.offsetHeight;
-
-  if (!baseWidth || !baseHeight) return;
-  const scale = Math.min(
-    1,
-    availableWidth / baseWidth,
-    availableHeight / baseHeight
-  );
-  scaleWrap.style.transform = `scale(${scale.toFixed(3)})`;
-}
-
-function closeGridModal() {
-  if (!gridModal) return;
-  gridModal.hidden = true;
-  gridModal.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("is-modal-open");
-  if (gridModalContent) {
-    gridModalContent.innerHTML = "";
-  }
-}
-
-function openGridModal() {
-  if (!gridModal || !gridModalContent || !lifeGrid) return;
-  const gridInner = lifeGrid.querySelector(".life-grid-inner");
-  if (!gridInner) return;
-
-  const clone = gridInner.cloneNode(true);
-  const cloneActions = clone.querySelector(".life-actions");
-  if (cloneActions) {
-    cloneActions.remove();
-  }
-  const cloneTitles = clone.querySelector(".life-titles");
-  if (cloneTitles) {
-    cloneTitles.remove();
-  }
-  const cloneFooter = clone.querySelector(".life-footer");
-  if (cloneFooter) {
-    cloneFooter.remove();
-  }
-  clone.querySelectorAll(".share-preview-text").forEach((node) => node.remove());
-  clone.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
-
-  gridModalContent.innerHTML = "";
-  const scaleWrap = document.createElement("div");
-  scaleWrap.className = "grid-modal-scale";
-  scaleWrap.appendChild(clone);
-  gridModalContent.appendChild(scaleWrap);
-  gridModal.hidden = false;
-  gridModal.setAttribute("aria-hidden", "false");
-  document.body.classList.add("is-modal-open");
-
-  requestAnimationFrame(updateGridModalScale);
-
-  const closeButton = gridModal.querySelector(".grid-modal-close");
-  if (closeButton) {
-    closeButton.focus();
-  }
-}
-
 if (clockSharePanel) {
   clockSharePanel.addEventListener("click", handleShareMenuClick);
 }
@@ -1488,21 +1418,6 @@ if (lifeGrid) {
   lifeGrid.addEventListener("focusin", () => setShareSource("grid"));
 }
 
-if (gridFullscreenBtn) {
-  gridFullscreenBtn.addEventListener("click", () => {
-    openGridModal();
-  });
-}
-
-if (gridModal) {
-  gridModal.addEventListener("click", (event) => {
-    const target = event.target;
-    if (target && target.closest("[data-close=\"true\"]")) {
-      closeGridModal();
-    }
-  });
-}
-
 window.addEventListener("click", (event) => {
   if (
     gridSharePanel &&
@@ -1516,9 +1431,6 @@ window.addEventListener("click", (event) => {
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     toggleShareMenu(gridSharePanel, false);
-    if (gridModal && !gridModal.hidden) {
-      closeGridModal();
-    }
   }
 });
 
