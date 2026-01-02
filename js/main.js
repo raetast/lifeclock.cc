@@ -1620,7 +1620,6 @@ window.addEventListener("resize", () => {
       updateLifeGrid(calculateAgeYears(lastDobDate), lastDobDate);
     }
   }
-  updateGridModalScale();
 });
 
 updateNameHeadings();
