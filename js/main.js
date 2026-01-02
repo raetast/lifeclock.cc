@@ -462,12 +462,37 @@ function updateLifeBoxScale() {
   const baseGridWidth =
     WEEKS_PER_YEAR * (BASE_LIFE_BOX_SIZE + BASE_LIFE_BOX_GAP) -
     BASE_LIFE_BOX_GAP;
-  const ratio = availableWidth / baseGridWidth;
-  const scale = ratio >= 0.995 ? 1 : Math.min(1, ratio);
-  const boxSize = Number((BASE_LIFE_BOX_SIZE * scale).toFixed(2));
-  const boxGap = Number((BASE_LIFE_BOX_GAP * scale).toFixed(2));
-  lifeBoxes.style.setProperty("--life-box-size", `${boxSize}px`);
-  lifeBoxes.style.setProperty("--life-box-gap", `${boxGap}px`);
+  const sizeStep = 0.5;
+  let boxSize = BASE_LIFE_BOX_SIZE;
+  let boxGap = BASE_LIFE_BOX_GAP;
+
+  if (availableWidth < baseGridWidth) {
+    const scale = availableWidth / baseGridWidth;
+    boxGap = Math.max(
+      sizeStep,
+      Math.floor((BASE_LIFE_BOX_GAP * scale) / sizeStep) * sizeStep
+    );
+    let maxSize =
+      (availableWidth - (WEEKS_PER_YEAR - 1) * boxGap) / WEEKS_PER_YEAR;
+    if (maxSize < sizeStep) {
+      boxGap = 0;
+      maxSize = availableWidth / WEEKS_PER_YEAR;
+    }
+    boxSize = Math.max(
+      sizeStep,
+      Math.min(
+        BASE_LIFE_BOX_SIZE,
+        Math.floor(maxSize / sizeStep) * sizeStep
+      )
+    );
+  }
+
+  const gridWidth = WEEKS_PER_YEAR * (boxSize + boxGap) - boxGap;
+  lifeBoxes.style.setProperty("--life-box-size", `${boxSize.toFixed(2)}px`);
+  lifeBoxes.style.setProperty("--life-box-gap", `${boxGap.toFixed(2)}px`);
+  if (lifeGrid) {
+    lifeGrid.style.setProperty("--life-grid-width", `${gridWidth}px`);
+  }
   return { boxSize, boxGap };
 }
 
@@ -971,10 +996,37 @@ function buildGridShareCanvas(stats) {
   return canvas;
 }
 
-async function downloadCanvas(canvas, filename) {
-  canvas.toBlob(async (blob) => {
-    if (!blob) return;
-    await saveBlob(blob, filename, "image/png");
+async function saveImageFromCanvas(canvas, filename, text) {
+  return new Promise((resolve) => {
+    canvas.toBlob(async (blob) => {
+      if (!blob) {
+        resolve("failed");
+        return;
+      }
+      if (window.showSaveFilePicker) {
+        await saveBlob(blob, filename, "image/png");
+        resolve("picker");
+        return;
+      }
+      const file = new File([blob], filename, { type: "image/png" });
+      const payload = {
+        files: [file],
+        title: "Life snapshot",
+        text: text || "My life snapshot",
+      };
+      if (navigator.share && navigator.canShare && navigator.canShare(payload)) {
+        try {
+          await navigator.share(payload);
+          resolve("shared");
+          return;
+        } catch (err) {
+          resolve("cancelled");
+          return;
+        }
+      }
+      await saveBlob(blob, filename, "image/png");
+      resolve("downloaded");
+    });
   });
 }
 
@@ -993,16 +1045,14 @@ async function shareCanvas(canvas, filename, button, text) {
       };
 
       try {
-        if (navigator.canShare && navigator.canShare(payload)) {
-          await navigator.share(payload);
-          resolve("shared");
+        if (!navigator.share || !navigator.canShare || !navigator.canShare(payload)) {
+          resolve("unsupported");
           return;
         }
-        downloadCanvas(canvas, filename);
-        resolve("downloaded");
+        await navigator.share(payload);
+        resolve("shared");
       } catch (err) {
-        downloadCanvas(canvas, filename);
-        resolve("downloaded");
+        resolve("cancelled");
       } finally {
         if (button) {
           button.disabled = false;
@@ -1261,6 +1311,9 @@ function setPrintBoxScale(active) {
   if (!active) {
     lifeBoxes.style.removeProperty("--life-box-size");
     lifeBoxes.style.removeProperty("--life-box-gap");
+    if (lifeGrid) {
+      lifeGrid.style.removeProperty("--life-grid-width");
+    }
     return;
   }
   const cols = WEEKS_PER_YEAR;
@@ -1279,8 +1332,16 @@ function setPrintBoxScale(active) {
     Math.min(BASE_LIFE_BOX_SIZE, sizeFromWidth)
   );
   const boxGap = boxSize * gapRatio;
+  const gridWidth =
+    WEEKS_PER_YEAR * (boxSize + boxGap) - boxGap;
   lifeBoxes.style.setProperty("--life-box-size", `${boxSize.toFixed(2)}px`);
   lifeBoxes.style.setProperty("--life-box-gap", `${boxGap.toFixed(2)}px`);
+  if (lifeGrid) {
+    lifeGrid.style.setProperty(
+      "--life-grid-width",
+      `${gridWidth.toFixed(2)}px`
+    );
+  }
 }
 
 if (typeof window.matchMedia === "function") {
@@ -1356,7 +1417,7 @@ function buildSocialShareText(includeEmoji = false) {
   return (
     `${label} life stats right now:\n` +
     `${timeEmoji}${readout} · ${weekEmoji}Week ${weeks}\n` +
-    "Check yours at lifeclock.cc\n" +
+    "Check yours at https://lifeclock.cc\n" +
     "#mylifeclock"
   );
 }
@@ -1423,18 +1484,20 @@ function handleShareMenuClick(event) {
       const filenameBase = fileSafeName(nameInput ? nameInput.value : "");
       const clockFilename = `${filenameBase}-lifeclock.png`;
       if (target === "download") {
-        downloadCanvas(canvas, clockFilename);
+        saveImageFromCanvas(canvas, clockFilename, buildClockShareText(true));
       } else if (target === "share") {
         if (!guardShare(button)) return;
-        shareCanvas(canvas, clockFilename, button, buildClockShareText(true));
+        shareCanvas(canvas, clockFilename, button, buildClockShareText(true)).then(
+          (result) => {
+            if (result === "unsupported") {
+              alert("Sharing isn't supported on this device.");
+            }
+          }
+        );
       } else if (target === "x") {
-        openShareUrl(
-          `https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`
-        );
+        openShareUrl(`https://twitter.com/intent/tweet?text=${shareText}`);
       } else if (target === "threads") {
-        openShareUrl(
-          `https://www.threads.net/intent/post?text=${shareText}%20${shareUrl}`
-        );
+        openShareUrl(`https://www.threads.net/intent/post?text=${shareText}`);
       }
     });
   } else if (source === "grid") {
@@ -1448,18 +1511,20 @@ function handleShareMenuClick(event) {
     const filenameBase = fileSafeName(nameInput ? nameInput.value : "");
     const gridFilename = `${filenameBase}-lifemap.png`;
     if (target === "download") {
-      downloadCanvas(canvas, gridFilename);
+      saveImageFromCanvas(canvas, gridFilename, buildGridShareText(true));
     } else if (target === "share") {
       if (!guardShare(button)) return;
-      shareCanvas(canvas, gridFilename, button, buildGridShareText(true));
+      shareCanvas(canvas, gridFilename, button, buildGridShareText(true)).then(
+        (result) => {
+          if (result === "unsupported") {
+            alert("Sharing isn't supported on this device.");
+          }
+        }
+      );
     } else if (target === "x") {
-      openShareUrl(
-        `https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`
-      );
+      openShareUrl(`https://twitter.com/intent/tweet?text=${shareText}`);
     } else if (target === "threads") {
-      openShareUrl(
-        `https://www.threads.net/intent/post?text=${shareText}%20${shareUrl}`
-      );
+      openShareUrl(`https://www.threads.net/intent/post?text=${shareText}`);
     }
   }
   toggleShareMenu(panel, false);
