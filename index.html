@@ -8,7 +8,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="css/styles.css" />
-  <link rel="stylesheet" href="css/preview.css" />
+  <script>
+    (function () {
+      const host = window.location.hostname;
+      const isLocal =
+        host === "localhost" || host === "127.0.0.1" || host === "::1";
+      if (!isLocal) return;
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "css/preview.css";
+      document.head.appendChild(link);
+    })();
+  </script>
   <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-QJ2QT2CQQK"></script>
 <script>
@@ -154,9 +165,27 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="js/local-config.js"></script>
+  <script>
+    (function () {
+      const host = window.location.hostname;
+      const isLocal =
+        host === "localhost" || host === "127.0.0.1" || host === "::1";
+      if (!isLocal) return;
+      document.write('<script src="js/local-config.js"><\/script>');
+    })();
+  </script>
   <script src="js/main.js"></script>
-  <script src="js/preview.js"></script>
+  <script>
+    (function () {
+      const host = window.location.hostname;
+      const isLocal =
+        host === "localhost" || host === "127.0.0.1" || host === "::1";
+      if (!isLocal) return;
+      const script = document.createElement("script");
+      script.src = "js/preview.js";
+      document.body.appendChild(script);
+    })();
+  </script>
 </body>
 
 </html>
