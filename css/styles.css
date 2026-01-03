@@ -692,11 +692,92 @@ body.has-results #life-clock-heading {
   letter-spacing: 0.02em;
 }
 
+.clock-readout-heading .clock-readout-period {
+  font-size: 0.5em;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  vertical-align: super;
+  margin-left: 4px;
+}
+
+.clock-readout-heading .clock-readout-period.is-am {
+  transform: translateY(-6px);
+}
+
+.clock-readout-heading .clock-readout-period.is-pm {
+  transform: translateY(6px);
+}
+
 body.has-results .clock-readout-heading {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
   transition-delay: 1s;
+}
+
+.clock-format-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--white);
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  box-shadow: inset 0px 1px 2px rgba(15, 23, 42, 0.5);
+  transition: opacity 1s ease 0s, transform 0.75s ease 0s;
+  position: relative;
+  --toggle-pos: 0%;
+}
+
+body.has-results .clock-format-toggle {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition-delay: 1.15s;
+}
+
+.clock-format-toggle::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  width: calc(50% - 3px);
+  border-radius: 999px;
+  background: var(--text);
+  box-shadow: 0 1px 2px rgba(var(--text-rgb), 0.75);
+  transform: translateX(var(--toggle-pos));
+  transition: transform 0.35s ease;
+  z-index: 0;
+}
+
+.clock-format-option {
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  transition: color 0.2s ease;
+  position: relative;
+  z-index: 1;
+}
+
+.clock-format-option:hover {
+  color: var(--btn-hover);
+}
+
+.clock-format-option.is-active {
+  color: var(--white);
+}
+
+.clock-format-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .clock-wrap {
@@ -783,9 +864,15 @@ body.has-results .clock-wrap {
       transparent 255deg 360deg);
 }
 
-/* .card {
-  padding: 15px;
-} */
+.day-night-mask::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0px -2px 2px rgba(15, 23, 42, 0.5);
+  z-index: 2;
+  pointer-events: none;
+}
 
 .day-night-disk {
   position: absolute;
@@ -801,7 +888,6 @@ body.has-results .clock-wrap {
       #0b1426 360deg);
   transform: rotate(var(--day-night-rotation, 0deg));
   transition: transform 0.8s ease;
-  box-shadow: inset 0px -2px 3px rgba(15, 23, 42, 0.5);
   overflow: hidden;
   z-index: 1;
 }

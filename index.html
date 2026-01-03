@@ -79,6 +79,29 @@
         <h2 class="section-title clock-readout-heading" id="clock-readout">
           --:--
         </h2>
+        <div
+          class="clock-format-toggle"
+          id="clock-format-toggle"
+          role="group"
+          aria-label="Clock format"
+        >
+          <button
+            type="button"
+            class="clock-format-option is-active"
+            data-clock-format="24"
+            aria-pressed="true"
+          >
+            24-hour
+          </button>
+          <button
+            type="button"
+            class="clock-format-option"
+            data-clock-format="12"
+            aria-pressed="false"
+          >
+            AM/PM
+          </button>
+        </div>
       </div>
       <section class="clock-panel" id="clock-panel" hidden>
         <div class="clock-face-wrap">
@@ -172,7 +195,7 @@
   <footer class="site-footer">
     Copyright © 2025
     <a href="https://raetast.com/" target="_blank" rel="noopener">Rætast</a>.
-    All rights reserved. v1.0.0
+    All rights reserved. v1.1
   </footer>
 
   <div class="week-tooltip" id="week-tooltip" hidden></div>

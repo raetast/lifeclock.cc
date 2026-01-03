@@ -7,6 +7,7 @@ const minuteHand = document.getElementById("minute-hand");
 const dayNightDisk = document.getElementById("day-night-disk");
 const clockReadout = document.getElementById("clock-readout");
 const clockCaption = document.getElementById("clock-caption");
+const clockFormatToggle = document.getElementById("clock-format-toggle");
 const weeksLivedHeading = document.getElementById("weeks-lived-heading");
 const lifeClockHeading = document.getElementById("life-clock-heading");
 const lifeCalendarHeading = document.getElementById("life-calendar-heading");
@@ -37,6 +38,7 @@ let currentYearsDisplayed = 0;
 const DAY_MS = 24 * 60 * 60 * 1000;
 let lastGridStats = null;
 let lastClockState = null;
+let lastClockRatio = null;
 let clockFaceImagePromise = null;
 let lastDobDate = null;
 let cachedLifeBoxSize = null;
@@ -48,6 +50,7 @@ let lastShareSource = "clock";
 const QA_MODE = window.QA_MODE === true;
 const QA_FAKE_DOB = "1985-04-24";
 const QA_FAKE_NAME = "David";
+let clockFormat = "24";
 
 if (QA_MODE && form) {
   // Disable native validation gating so submit still fires during QA.
@@ -151,8 +154,8 @@ function updateNameHeadings() {
   }
   if (lifeCalendarHeading) {
     lifeCalendarHeading.textContent = possessive
-      ? `${possessive} life in weeks`
-      : "My life in weeks";
+      ? `${possessive} week map`
+      : "My week map";
   }
 }
 
@@ -283,6 +286,41 @@ function setShareSource(source) {
   }
 }
 
+function formatClockReadout(hours, minutes, dayOffset) {
+  const dayLabel = dayOffset > 0 ? `Day ${dayOffset + 1}, ` : "";
+  const mm = minutes.toString().padStart(2, "0");
+
+  if (clockFormat === "12") {
+    const period = hours >= 12 ? "PM" : "AM";
+    const periodClass = period === "AM" ? "is-am" : "is-pm";
+    let hour12 = hours % 12;
+    if (hour12 === 0) hour12 = 12;
+    const hh = hour12.toString().padStart(2, "0");
+    return `${dayLabel}${hh}:${mm} <sup class="clock-readout-period ${periodClass}">${period}</sup>`;
+  }
+
+  const hh = hours.toString().padStart(2, "0");
+  return `${dayLabel}${hh}:${mm}`;
+}
+
+function setClockFormat(nextFormat) {
+  if (!nextFormat || nextFormat === clockFormat) return;
+  clockFormat = nextFormat;
+  if (clockFormatToggle) {
+    const togglePosition = clockFormat === "12" ? "100%" : "0%";
+    clockFormatToggle.style.setProperty("--toggle-pos", togglePosition);
+    const options = clockFormatToggle.querySelectorAll("[data-clock-format]");
+    options.forEach((option) => {
+      const isActive = option.dataset.clockFormat === clockFormat;
+      option.classList.toggle("is-active", isActive);
+      option.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+  }
+  if (lastClockRatio !== null) {
+    updateClock(lastClockRatio);
+  }
+}
+
 function updateClock(ratio) {
   const nonNegativeRatio = Math.max(0, ratio);
   const totalMinutes = nonNegativeRatio * 24 * 60;
@@ -301,10 +339,7 @@ function updateClock(ratio) {
     dayNightDisk.style.setProperty("--day-night-rotation", `${dayAngle}deg`);
   }
 
-  const hh = hours.toString().padStart(2, "0");
-  const mm = minutes.toString().padStart(2, "0");
-  const dayLabel = dayOffset > 0 ? `Day ${dayOffset + 1}, ` : "";
-  clockReadout.textContent = `${dayLabel}${hh}:${mm}`;
+  clockReadout.innerHTML = formatClockReadout(hours, minutes, dayOffset);
   const beyondNote = dayOffset > 0 ? "Beyond average life expectancy. " : "";
   const updateNote = lifeExpectancyLastUpdate
     ? `, last update: ${lifeExpectancyLastUpdate}`
@@ -325,6 +360,7 @@ function updateClock(ratio) {
     hours,
     minutes,
   };
+  lastClockRatio = ratio;
 }
 
 function flipFormShell(enableResults) {
@@ -444,7 +480,7 @@ function updateLifeGrid(ageYears, dobDate) {
     name: nameInput.value.trim(),
     title: lifeCalendarHeading
       ? lifeCalendarHeading.textContent
-      : "My life in weeks",
+      : "My week map",
   };
   // Intentionally skip print-specific scaling to avoid overriding UI sizing.
 }
@@ -738,15 +774,8 @@ async function buildClockShareCanvas(state) {
 
   const headingX = width / 2;
   const headingY = 320;
-  const headingText = "My life clock";
-  const headingToken = " clock";
-  let headingLine1 = headingText;
-  let headingLine2 = "";
-  const headingTokenIndex = headingText.toLowerCase().lastIndexOf(headingToken);
-  if (headingTokenIndex !== -1) {
-    headingLine1 = headingText.slice(0, headingTokenIndex);
-    headingLine2 = headingText.slice(headingTokenIndex + 1);
-  }
+  const headingLine1 = "My life";
+  const headingLine2 = "time is";
 
   ctx.fillStyle = text;
   ctx.textAlign = "center";
@@ -780,7 +809,8 @@ async function buildClockShareCanvas(state) {
 
   const readoutFontSize = 140;
   const readoutText = state.readout || "--:--";
-  const readoutPaddingX = 0;
+  const hasReadoutPeriod = /\s(AM|PM)$/.test(readoutText);
+  const readoutPaddingX = hasReadoutPeriod ? -90 : -30;
   const readoutPaddingTop = 10;
   const readoutPaddingBottom = 50;
   const readoutMetrics = ctx.measureText(readoutText);
@@ -893,7 +923,7 @@ function buildGridShareCanvas(stats) {
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
 
-  const titleText = "My life in weeks";
+  const titleText = "My week map";
 
   ctx.fillStyle = text;
   const titleFontSize = 130;
@@ -1105,6 +1135,16 @@ form.addEventListener("submit", (event) => {
   syncDobValue();
   renderFromDob(dobInput.value);
 });
+
+if (clockFormatToggle) {
+  const initialPosition = clockFormat === "12" ? "100%" : "0%";
+  clockFormatToggle.style.setProperty("--toggle-pos", initialPosition);
+  clockFormatToggle.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-clock-format]");
+    if (!target) return;
+    setClockFormat(target.dataset.clockFormat);
+  });
+}
 
 function renderFromDob(value) {
   if (!form.checkValidity()) {
