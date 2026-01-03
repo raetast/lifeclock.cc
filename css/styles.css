@@ -384,7 +384,7 @@ button {
 .primary {
   background: var(--accent);
   color: white;
-  padding: 12px 24px;
+  padding: 12px 48px;
   font-size: 14px;
 }
 
@@ -524,11 +524,31 @@ button {
   height: 50px;
   padding: 0;
   border-radius: 999px;
+  position: relative;
 }
 
-#results-share-panel .share-menu-item:hover,
-#results-share-panel .share-menu-item:focus-visible {
+#results-share-panel .share-menu-item::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 50px;
+  height: 50px;
+  border-radius: 999px;
   background: color-mix(in srgb, var(--white) 100%, transparent);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+#results-share-panel .share-menu-item > * {
+  position: relative;
+  z-index: 1;
+}
+
+#results-share-panel .share-menu-item:hover::before,
+#results-share-panel .share-menu-item:focus-visible::before {
+  opacity: 1;
 }
 
 #results-share-panel .share-menu-item:hover .share-social-icon,
