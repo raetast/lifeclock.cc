@@ -1,5 +1,21 @@
 @import url("https://fonts.googleapis.com/css2?family=Zalando+Sans:ital,wght@0,200..900;1,200..900&display=swap");
 
+@font-face {
+  font-family: "Zalando Sans";
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url("../assets/fonts/zalando-sans-normal-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Zalando Sans";
+  font-style: italic;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url("../assets/fonts/zalando-sans-italic-latin.woff2") format("woff2");
+}
+
 :root {
   --bg-a1: #f3f7ff;
   --bg-a2: #d8e7f6;
