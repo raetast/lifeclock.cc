@@ -1,27 +1,18 @@
 const dobInput = document.getElementById("dob");
-const nameInput = document.getElementById("name");
 const form = document.getElementById("dob-form");
+const dobErrorTooltip = document.getElementById("dob-error");
 const clockPanel = document.getElementById("clock-panel");
 const hourHand = document.getElementById("hour-hand");
 const minuteHand = document.getElementById("minute-hand");
 const dayNightDisk = document.getElementById("day-night-disk");
-const clockReadout = document.getElementById("clock-readout");
 const clockCaption = document.getElementById("clock-caption");
-const clockFormatToggle = document.getElementById("clock-format-toggle");
 const weeksLivedHeading = document.getElementById("weeks-lived-heading");
-const lifeClockHeading = document.getElementById("life-clock-heading");
 const lifeCalendarHeading = document.getElementById("life-calendar-heading");
-const defaultGradient =
-  "radial-gradient(circle at 20% 20%, #f6f7fb 0, #e4ecf3 25%, #d7e7f0 50%, #c5dfea 75%, #b7d3e3 100%)";
 const lifeGrid = document.getElementById("life-grid");
 const lifeBoxes = document.getElementById("life-boxes");
 const weekTooltip = document.getElementById("week-tooltip");
-const printBtn = document.getElementById("print-btn");
-const clockSharePanel = document.getElementById("clock-share-panel");
-const gridSharePanel = document.getElementById("grid-share-panel");
+const copyrightYear = document.getElementById("copyright-year");
 const resultsSharePanel = document.getElementById("results-share-panel");
-const formShell = document.querySelector(".form-shell");
-const gridWrap = document.querySelector(".grid-wrap");
 
 const today = new Date();
 today.setHours(0, 0, 0, 0);
@@ -29,11 +20,18 @@ const MAX_AGE_YEARS = 123;
 const minAllowedYear = today.getFullYear() - MAX_AGE_YEARS;
 const minAllowedDate = new Date(`${minAllowedYear}-01-01T00:00:00`);
 
-let lifeExpectancyYears = 100;
-const EXPECTANCY_SOURCE = "World Bank global average";
-let lifeExpectancyLastUpdate = null;
+const lifeExpectancyYears = 100;
+const EXPECTANCY_SOURCE = "100-year lifespan map";
 const MAX_YEARS_DISPLAYED = 123;
 const WEEKS_PER_YEAR = 52;
+const COMMONS_API_ENDPOINT = "https://commons.wikimedia.org/w/api.php";
+const WIKIDATA_API_ENDPOINT = "https://www.wikidata.org/w/api.php";
+const COMMONS_MEMBERS_PER_PAGE = 250;
+const COMMONS_CATEGORY_PAGE_LIMIT = 8;
+const NOTABLE_WEEK_COVERAGE_TARGET = 48;
+const WIKIDATA_ENTITY_BATCH_SIZE = 50;
+const MAX_TOOLTIP_NOTABLES = 3;
+const MIN_NOTABLE_SITELINKS = 1;
 let currentYearsDisplayed = 0;
 const DAY_MS = 24 * 60 * 60 * 1000;
 let lastGridStats = null;
@@ -45,40 +43,31 @@ let cachedLifeBoxSize = null;
 let cachedLifeBoxGap = null;
 const BASE_LIFE_BOX_SIZE = 15;
 const BASE_LIFE_BOX_GAP = 2;
-let lastShareSource = "clock";
-// QA toggle: set window.QA_MODE in js/local-config.js.
-const QA_MODE = window.QA_MODE === true;
+const CANVAS_FONT_FAMILY = '"Inter", "Helvetica Neue", Arial, sans-serif';
+const PENDULUM_SWAY_DURATION_MS = 1000;
+const PENDULUM_CENTER_OFFSET_MS = PENDULUM_SWAY_DURATION_MS / 2;
+let flipSettleTimer = null;
+let flipStartTimer = null;
+let clockMotionTimer = null;
+let pendulumStartedAt = performance.now();
+let pendingClockVisualState = null;
+let lifeMapFillObserver = null;
+// QA toggle: set window.QA_MODE in js/local-config.js or use ?qa=1.
+const QA_MODE =
+  window.QA_MODE === true ||
+  new URLSearchParams(window.location.search).get("qa") === "1";
 const QA_FAKE_DOB = "1985-04-24";
-const QA_FAKE_NAME = "David";
-let clockFormat = "24";
 
-if (QA_MODE && form) {
-  // Disable native validation gating so submit still fires during QA.
+if (form) {
+  // Use the in-app tooltip instead of browser-native validation bubbles.
   form.noValidate = true;
 }
 
+requestAnimationFrame(() => {
+  pendulumStartedAt = performance.now();
+  document.body.classList.add("is-pendulum-ready");
+});
 
-async function fetchLifeExpectancy() {
-  try {
-    const res = await fetch(
-      "https://api.worldbank.org/v2/country/WLD/indicator/SP.DYN.LE00.IN?format=json"
-    );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const series = Array.isArray(data) && Array.isArray(data[1]) ? data[1] : [];
-    const firstValid = series.find((entry) => entry && entry.value !== null);
-    if (firstValid && typeof firstValid.value === "number") {
-      lifeExpectancyYears = Number(firstValid.value.toFixed(1));
-      lifeExpectancyLastUpdate = firstValid.date || null;
-    }
-  } catch (err) {
-    console.warn("Falling back to default life expectancy:", err);
-  } finally {
-    if (document.body.classList.contains("has-results") && dobInput.value) {
-      renderFromDob(dobInput.value);
-    }
-  }
-}
 
 function calculateAgeYears(dateValue) {
   const birth = new Date(dateValue);
@@ -95,11 +84,40 @@ function daysLivedFromDob(dobDate) {
   return Math.floor((today - dobDate) / DAY_MS);
 }
 
-function possessiveName() {
-  if (!nameInput) return null;
-  const trimmed = nameInput.value.trim();
-  if (!trimmed) return null;
-  return trimmed.endsWith("s") ? `${trimmed}'` : `${trimmed}'s`;
+function getAnniversaryDate(birthDate, year) {
+  const anniversary = new Date(birthDate);
+  anniversary.setFullYear(year, birthDate.getMonth(), birthDate.getDate());
+  anniversary.setHours(0, 0, 0, 0);
+  return anniversary;
+}
+
+function getAgePosition(birthDate, referenceDate) {
+  let ageYears = referenceDate.getFullYear() - birthDate.getFullYear();
+  let lastBirthday = getAnniversaryDate(birthDate, referenceDate.getFullYear());
+  if (referenceDate < lastBirthday) {
+    ageYears -= 1;
+    lastBirthday = getAnniversaryDate(birthDate, referenceDate.getFullYear() - 1);
+  }
+  const daysSinceBirthday = Math.max(
+    0,
+    Math.floor((referenceDate - lastBirthday) / DAY_MS)
+  );
+  const ageWeek = Math.min(
+    WEEKS_PER_YEAR,
+    Math.floor(daysSinceBirthday / 7) + 1
+  );
+  const displayedWeeks = ageYears * WEEKS_PER_YEAR + ageWeek;
+  return { ageYears, ageWeek, displayedWeeks };
+}
+
+const notableLifespansByWeek = new Map();
+const notableLifespanRequests = new Map();
+const notableAgeRequests = new Map();
+const failedNotableLifespanWeeks = new Set();
+
+function getEffectiveDobValue(value) {
+  const trimmed = value ? value.trim() : "";
+  return QA_MODE && !trimmed ? QA_FAKE_DOB : trimmed;
 }
 
 function parseDob(value) {
@@ -118,44 +136,131 @@ function parseDob(value) {
   return null;
 }
 
+function getDobValidation(value) {
+  const dobValue = getEffectiveDobValue(value);
+  const digits = dobValue.replace(/\D/g, "");
+  if (!dobValue) {
+    return { date: null, message: "Enter your date of birth." };
+  }
+  if (digits.length < 8 || dobValue.length !== 10) {
+    return { date: null, message: "Use YYYY-MM-DD." };
+  }
+  const parsed = parseDob(dobValue);
+  if (!parsed) {
+    return { date: null, message: "Enter a real calendar date." };
+  }
+  if (parsed > today) {
+    return { date: null, message: "Date of birth cannot be in the future." };
+  }
+  if (parsed < minAllowedDate) {
+    return {
+      date: null,
+      message: `Enter a date from ${minAllowedYear} onward.`,
+    };
+  }
+  return { date: parsed, message: "" };
+}
+
+function showDobError(message) {
+  if (!dobInput || !dobErrorTooltip) return;
+  dobErrorTooltip.textContent = message;
+  dobErrorTooltip.hidden = false;
+  dobInput.setAttribute("aria-invalid", "true");
+}
+
+function hideDobError() {
+  if (!dobInput || !dobErrorTooltip) return;
+  dobErrorTooltip.hidden = true;
+  dobErrorTooltip.textContent = "";
+  dobInput.removeAttribute("aria-invalid");
+}
+
 function formatDobInput(value) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
   const year = digits.slice(0, 4);
   const month = digits.slice(4, 6);
   const day = digits.slice(6, 8);
   let formatted = year;
-  if (month) formatted += `-${month}`;
-  if (day) formatted += `-${day}`;
+  if (digits.length >= 4) formatted += "-";
+  if (month) formatted += month;
+  if (digits.length >= 6) formatted += "-";
+  if (day) formatted += day;
   return formatted;
+}
+
+function setDobValueFromDigits(digits, cursorDigitCount = digits.length) {
+  const nextValue = formatDobInput(digits);
+  dobInput.value = nextValue;
+  let nextSelection = nextValue.length;
+  if (cursorDigitCount < digits.length) {
+    let seenDigits = 0;
+    nextSelection = 0;
+    while (nextSelection < nextValue.length) {
+      if (/\d/.test(nextValue[nextSelection])) {
+        seenDigits += 1;
+      }
+      nextSelection += 1;
+      if (seenDigits >= cursorDigitCount) break;
+    }
+    if (nextValue[nextSelection] === "-") nextSelection += 1;
+  }
+  dobInput.setSelectionRange(nextSelection, nextSelection);
+}
+
+function handleDobBoundaryBackspace(event) {
+  if (!dobInput || event.inputType !== "deleteContentBackward") return;
+  const start = dobInput.selectionStart;
+  const end = dobInput.selectionEnd;
+  if (start === null || end === null || start !== end) return;
+  if (dobInput.value[start - 1] !== "-") return;
+  event.preventDefault();
+  const digitsBeforeHyphen = dobInput.value.slice(0, start - 1).replace(/\D/g, "");
+  const digitsAfterHyphen = dobInput.value.slice(start).replace(/\D/g, "");
+  const nextDigits =
+    digitsBeforeHyphen.slice(0, -1) + digitsAfterHyphen;
+  setDobValueFromDigits(nextDigits, Math.max(0, digitsBeforeHyphen.length - 1));
+  syncDobValue();
 }
 
 function syncDobValue() {
   if (!dobInput) return;
+  const previousValue = dobInput.value;
+  const previousSelection = dobInput.selectionStart;
   const formatted = formatDobInput(dobInput.value);
-  if (formatted !== dobInput.value) dobInput.value = formatted;
+  if (formatted !== dobInput.value) {
+    const digitsBeforeCursor = previousValue
+      .slice(0, previousSelection || previousValue.length)
+      .replace(/\D/g, "").length;
+    dobInput.value = formatted;
+    let nextSelection = formatted.length;
+    if (digitsBeforeCursor < 8) {
+      let seenDigits = 0;
+      nextSelection = 0;
+      while (nextSelection < formatted.length) {
+        if (/\d/.test(formatted[nextSelection])) {
+          seenDigits += 1;
+        }
+        nextSelection += 1;
+        if (seenDigits >= digitsBeforeCursor) {
+          break;
+        }
+      }
+      if (formatted[nextSelection] === "-") nextSelection += 1;
+    }
+    dobInput.setSelectionRange(nextSelection, nextSelection);
+  }
   dobInput.setCustomValidity("");
-  if (!dobInput.value) return;
-  if (dobInput.value.length !== 10) {
-    dobInput.setCustomValidity("Enter a full date of birth.");
+  const validation = getDobValidation(dobInput.value);
+  if (validation.message) {
+    dobInput.setCustomValidity(validation.message);
     return;
   }
-  const parsed = parseDob(dobInput.value);
-  if (!parsed || parsed > today || parsed < minAllowedDate) {
-    dobInput.setCustomValidity("Enter a valid date of birth.");
-  }
+  hideDobError();
 }
 
-function updateNameHeadings() {
-  const possessive = possessiveName();
-  if (lifeClockHeading) {
-    lifeClockHeading.textContent = possessive
-      ? `${possessive} life clock`
-      : "My life clock";
-  }
+function updateResultHeadings() {
   if (lifeCalendarHeading) {
-    lifeCalendarHeading.textContent = possessive
-      ? `${possessive} week map`
-      : "My week map";
+    lifeCalendarHeading.textContent = "My life map";
   }
 }
 
@@ -174,154 +279,20 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function drawCanvasBackground(ctx, width, height, strength = 1) {
-  const a1 = getCssVar("--bg-a1", "#f3f7ff");
-  const a2 = getCssVar("--bg-a2", "#d8e7f6");
-  const b1 = getCssVar("--bg-b1", "#eef8ff");
-  const b2 = getCssVar("--bg-b2", "#cfe8f6");
-  const c1 = getCssVar("--bg-c1", "#e2f1fb");
-  const c2 = getCssVar("--bg-c2", "#c4e0f2");
-  const d1 = getCssVar("--bg-d1", "#d7ecf7");
-  const d2 = getCssVar("--bg-d2", "#b9d6ea");
-  const d3 = getCssVar("--bg-d3", "#a9c8dc");
-  const accent = getCssVar("--accent", "#33cc99");
-  const accent2 = getCssVar("--accent-2", "#f97316");
-
+function drawCanvasBackground(ctx, width, height) {
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = getCssVar("--page-bg", "#f7f5ef");
   ctx.fillRect(0, 0, width, height);
-
-  const radius = Math.max(width, height) * 0.9;
-  ctx.save();
-  ctx.globalAlpha = Math.max(0, Math.min(strength, 1));
-  const gradA = ctx.createRadialGradient(
-    width * 0.15,
-    height * 0.1,
-    0,
-    width * 0.15,
-    height * 0.1,
-    radius
-  );
-  gradA.addColorStop(0, a1);
-  gradA.addColorStop(0.3, a2);
-  gradA.addColorStop(0.62, hexToRgba(a2, 0));
-  ctx.fillStyle = gradA;
-  ctx.fillRect(0, 0, width, height);
-
-  const gradB = ctx.createRadialGradient(
-    width * 0.85,
-    height * 0.15,
-    0,
-    width * 0.85,
-    height * 0.15,
-    radius
-  );
-  gradB.addColorStop(0, b1);
-  gradB.addColorStop(0.32, b2);
-  gradB.addColorStop(0.64, hexToRgba(b2, 0));
-  ctx.fillStyle = gradB;
-  ctx.fillRect(0, 0, width, height);
-
-  const gradC = ctx.createRadialGradient(
-    width * 0.2,
-    height * 0.85,
-    0,
-    width * 0.2,
-    height * 0.85,
-    radius
-  );
-  gradC.addColorStop(0, c1);
-  gradC.addColorStop(0.34, c2);
-  gradC.addColorStop(0.66, hexToRgba(c2, 0));
-  ctx.fillStyle = gradC;
-  ctx.fillRect(0, 0, width, height);
-
-  const gradD = ctx.createRadialGradient(
-    width * 0.8,
-    height * 0.8,
-    0,
-    width * 0.8,
-    height * 0.8,
-    radius
-  );
-  gradD.addColorStop(0, d1);
-  gradD.addColorStop(0.36, d2);
-  gradD.addColorStop(0.72, d3);
-  ctx.fillStyle = gradD;
-  ctx.fillRect(0, 0, width, height);
-
-  const glowRadius = Math.max(width, height) * 0.75;
-  const glowLeft = ctx.createRadialGradient(
-    width * 0.1,
-    height * 0.1,
-    0,
-    width * 0.1,
-    height * 0.1,
-    glowRadius
-  );
-  glowLeft.addColorStop(0, hexToRgba(accent, 0.35));
-  glowLeft.addColorStop(0.6, hexToRgba(accent, 0));
-  ctx.fillStyle = glowLeft;
-  ctx.fillRect(0, 0, width, height);
-
-  const glowRight = ctx.createRadialGradient(
-    width * 0.9,
-    height * 0.9,
-    0,
-    width * 0.9,
-    height * 0.9,
-    glowRadius
-  );
-  glowRight.addColorStop(0, hexToRgba(accent2, 0.35));
-  glowRight.addColorStop(0.6, hexToRgba(accent2, 0));
-  ctx.fillStyle = glowRight;
-  ctx.fillRect(0, 0, width, height);
-  ctx.restore();
 }
 
-function setShareSource(source) {
-  lastShareSource = source;
-  if (resultsSharePanel) {
-    resultsSharePanel.dataset.shareSource = source;
-  }
-}
-
-function formatClockReadout(hours, minutes, dayOffset) {
+function formatClockReadoutText(hours, minutes, dayOffset) {
   const dayLabel = dayOffset > 0 ? `Day ${dayOffset + 1}, ` : "";
-  const mm = minutes.toString().padStart(2, "0");
-
-  if (clockFormat === "12") {
-    const period = hours >= 12 ? "PM" : "AM";
-    const periodClass = period === "AM" ? "is-am" : "is-pm";
-    let hour12 = hours % 12;
-    if (hour12 === 0) hour12 = 12;
-    const hh = hour12.toString().padStart(2, "0");
-    return `${dayLabel}${hh}:${mm} <sup class="clock-readout-period ${periodClass}">${period}</sup>`;
-  }
-
   const hh = hours.toString().padStart(2, "0");
+  const mm = minutes.toString().padStart(2, "0");
   return `${dayLabel}${hh}:${mm}`;
 }
 
-function setClockFormat(nextFormat) {
-  if (!nextFormat || nextFormat === clockFormat) return;
-  clockFormat = nextFormat;
-  if (clockFormatToggle) {
-    const togglePosition = clockFormat === "12" ? "100%" : "0%";
-    clockFormatToggle.style.setProperty("--toggle-pos", togglePosition);
-    const options = clockFormatToggle.querySelectorAll("[data-clock-format]");
-    options.forEach((option) => {
-      const isActive = option.dataset.clockFormat === clockFormat;
-      option.classList.toggle("is-active", isActive);
-      option.setAttribute("aria-pressed", isActive ? "true" : "false");
-    });
-  }
-  if (lastClockRatio !== null) {
-    updateClock(lastClockRatio);
-  }
-}
-
-function updateClock(ratio) {
+function getClockVisualState(ratio) {
   const nonNegativeRatio = Math.max(0, ratio);
   const totalMinutes = nonNegativeRatio * 24 * 60;
   const dayOffset = Math.floor(totalMinutes / (24 * 60));
@@ -331,60 +302,151 @@ function updateClock(ratio) {
 
   const hourAngle = (hours % 12) * 30 + minutes * 0.5;
   const minuteAngle = minutes * 6;
+  const dayAngle = ((hours + minutes / 60) / 24) * 360 - 90;
 
-  hourHand.style.transform = `translate(-50%, 0) rotate(${hourAngle}deg)`;
-  minuteHand.style.transform = `translate(-50%, 0) rotate(${minuteAngle}deg)`;
-  if (dayNightDisk) {
-    const dayAngle = ((hours + minutes / 60) / 24) * 360 - 90;
-    dayNightDisk.style.setProperty("--day-night-rotation", `${dayAngle}deg`);
-  }
-
-  clockReadout.innerHTML = formatClockReadout(hours, minutes, dayOffset);
-  const beyondNote = dayOffset > 0 ? "Beyond average life expectancy. " : "";
-  const updateNote = lifeExpectancyLastUpdate
-    ? `, last update: ${lifeExpectancyLastUpdate}`
-    : "";
-  clockCaption.innerHTML = `${beyondNote}Visualization based on an average life expectancy of ${lifeExpectancyYears} years. (${EXPECTANCY_SOURCE}${updateNote})`;
-  clockPanel.hidden = false;
-  clockPanel.classList.add("is-visible");
-
-  document.body.style.backgroundImage = defaultGradient;
-
-  lastClockState = {
-    heading: lifeClockHeading
-      ? lifeClockHeading.textContent
-      : "My life clock",
-    readout: clockReadout ? clockReadout.textContent : "",
+  return {
+    dayOffset,
+    dayAngle,
     hourAngle,
     minuteAngle,
     hours,
     minutes,
   };
+}
+
+function applyClockVisualState(state) {
+  if (!state) return;
+  hourHand.style.transform = `translate(-50%, 0) rotate(${state.hourAngle}deg)`;
+  minuteHand.style.transform = `translate(-50%, 0) rotate(${state.minuteAngle}deg)`;
+  if (dayNightDisk) {
+    dayNightDisk.style.setProperty("--day-night-rotation", `${state.dayAngle}deg`);
+  }
+}
+
+function resetClockVisualState() {
+  document.body.classList.add("is-clock-motion-reset");
+  applyClockVisualState({
+    hourAngle: 0,
+    minuteAngle: 0,
+    dayAngle: 0,
+  });
+  void hourHand.offsetWidth;
+  requestAnimationFrame(() => {
+    document.body.classList.remove("is-clock-motion-reset");
+  });
+}
+
+function animatePendingClockVisualState() {
+  if (!pendingClockVisualState) return;
+  const state = pendingClockVisualState;
+  pendingClockVisualState = null;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      applyClockVisualState(state);
+    });
+  });
+}
+
+function updateClock(ratio, options = {}) {
+  const visualState = getClockVisualState(ratio);
+
+  if (options.deferMotion) {
+    pendingClockVisualState = visualState;
+    resetClockVisualState();
+  } else {
+    pendingClockVisualState = null;
+    applyClockVisualState(visualState);
+  }
+
+  const readout = formatClockReadoutText(
+    visualState.hours,
+    visualState.minutes,
+    visualState.dayOffset
+  );
+  const beyondNote =
+    visualState.dayOffset > 0 ? "Beyond average life expectancy. " : "";
+  clockCaption.innerHTML =
+    `${beyondNote}Visualization based on a ${lifeExpectancyYears}-year lifespan. (${EXPECTANCY_SOURCE}) ` +
+    `Inspired by Tim Urban's "Your Life in Weeks" from Wait But Why. ` +
+    `Lifespan references from <a href="https://www.wikidata.org/" target="_blank" rel="noopener">Wikidata</a> and ` +
+    `<a href="https://www.wikipedia.org/" target="_blank" rel="noopener">Wikipedia</a>.`;
+  clockPanel.hidden = false;
+  clockPanel.classList.add("is-visible");
+
+  lastClockState = {
+    heading: "The Life Clock",
+    readout,
+    hourAngle: visualState.hourAngle,
+    minuteAngle: visualState.minuteAngle,
+    hours: visualState.hours,
+    minutes: visualState.minutes,
+  };
   lastClockRatio = ratio;
 }
 
-function flipFormShell(enableResults) {
-  if (!formShell) return;
+function prefersReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function delayUntilPendulumCenter() {
+  if (prefersReducedMotion()) return 0;
+  const elapsed = performance.now() - pendulumStartedAt;
+  const phase = elapsed % PENDULUM_SWAY_DURATION_MS;
+  const delay =
+    (PENDULUM_CENTER_OFFSET_MS - phase + PENDULUM_SWAY_DURATION_MS) %
+    PENDULUM_SWAY_DURATION_MS;
+  return delay < 40 ? 0 : delay;
+}
+
+function applyFlipFormShell(enableResults) {
   const currentlyHasResults = document.body.classList.contains("has-results");
   if (enableResults === currentlyHasResults) return;
 
-  const firstRect = formShell.getBoundingClientRect();
-  document.body.classList.toggle("has-results", enableResults);
-  const lastRect = formShell.getBoundingClientRect();
-  const deltaY = firstRect.top - lastRect.top;
-
-  if (deltaY !== 0 && formShell.animate) {
-    formShell.animate(
-      [
-        { transform: `translateY(${deltaY}px)` },
-        { transform: "translateY(0)" },
-      ],
-      {
-        duration: 550,
-        easing: "cubic-bezier(0.33, 1, 0.68, 1)",
-      }
-    );
+  window.clearTimeout(flipSettleTimer);
+  window.clearTimeout(clockMotionTimer);
+  if (enableResults) {
+    window.scrollTo(0, 0);
   }
+  document.body.classList.remove("is-flip-pending");
+  document.body.classList.toggle("is-flipping", enableResults);
+  document.body.classList.toggle("has-results", enableResults);
+  if (enableResults) {
+    clockMotionTimer = window.setTimeout(() => {
+      animatePendingClockVisualState();
+    }, 1050);
+    flipSettleTimer = window.setTimeout(() => {
+      document.body.classList.remove("is-flipping");
+    }, 1700);
+  } else {
+    document.body.classList.remove("is-flipping");
+    window.clearTimeout(clockMotionTimer);
+    window.clearTimeout(flipStartTimer);
+    pendingClockVisualState = null;
+  }
+}
+
+function flipFormShell(enableResults) {
+  window.clearTimeout(flipStartTimer);
+
+  if (!enableResults) {
+    document.body.classList.remove("is-flip-pending");
+    applyFlipFormShell(false);
+    return;
+  }
+
+  const currentlyHasResults = document.body.classList.contains("has-results");
+  if (currentlyHasResults) return;
+
+  document.body.classList.add("is-flip-pending");
+  const delay = delayUntilPendulumCenter();
+  if (delay === 0) {
+    applyFlipFormShell(true);
+    return;
+  }
+
+  flipStartTimer = window.setTimeout(() => {
+    applyFlipFormShell(true);
+  }, delay);
 }
 
 function buildLifeBoxes(totalYears) {
@@ -392,32 +454,58 @@ function buildLifeBoxes(totalYears) {
   lifeBoxes.innerHTML = "";
   const container = document.createDocumentFragment();
   for (let year = 1; year <= totalYears; year++) {
-    const row = document.createElement("div");
-    row.className = "life-row";
     for (let week = 0; week < WEEKS_PER_YEAR; week++) {
       const box = document.createElement("div");
       box.className = "life-box upcoming";
       box.dataset.year = String(year);
       const weekNumber = week + 1;
       box.dataset.week = String(weekNumber);
+      if (year > 1 && (year - 1) % 10 === 0) {
+        box.classList.add("decade-start");
+      }
       const bandIndex = Math.floor((weekNumber - 1) / 10);
       if (bandIndex % 2 === 1) {
         box.classList.add("band-alt");
       }
-      if (weekNumber % 10 === 0) {
-        box.classList.add("ten-mark");
-      }
-      row.appendChild(box);
+      container.appendChild(box);
     }
-    container.appendChild(row);
   }
   lifeBoxes.appendChild(container);
   currentYearsDisplayed = totalYears;
+  notableLifespansByWeek.forEach((people, globalWeek) => {
+    markLoadedNotableWeek(globalWeek, people);
+  });
+}
+
+function observeLifeMapFill() {
+  if (!lifeGrid) return;
+  if (!("IntersectionObserver" in window)) {
+    lifeGrid.classList.add("is-fill-animated");
+    return;
+  }
+  if (!lifeMapFillObserver) {
+    lifeMapFillObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add("is-fill-animated");
+          lifeMapFillObserver.unobserve(entry.target);
+        });
+      },
+      {
+        threshold: 0.28,
+        rootMargin: "0px 0px -8% 0px",
+      }
+    );
+  }
+  lifeMapFillObserver.unobserve(lifeGrid);
+  lifeMapFillObserver.observe(lifeGrid);
 }
 
 function updateLifeGrid(ageYears, dobDate) {
   const weeksLived = weeksLivedFromDob(dobDate);
   const daysLived = daysLivedFromDob(dobDate);
+  const agePosition = getAgePosition(dobDate, today);
   const expectancyYearsCapped = Math.min(
     lifeExpectancyYears,
     MAX_YEARS_DISPLAYED
@@ -426,62 +514,77 @@ function updateLifeGrid(ageYears, dobDate) {
   const desiredYears = Math.min(
     Math.max(
       Math.ceil(expectancyYearsCapped),
-      Math.ceil(weeksLived / WEEKS_PER_YEAR)
+      agePosition.ageYears + 1
     ),
     MAX_YEARS_DISPLAYED
   );
   buildLifeBoxes(desiredYears);
-  const showBeyond = weeksLived > expectancyWeeks;
+  const showBeyond = agePosition.displayedWeeks > expectancyWeeks;
   const { boxSize, boxGap } = updateLifeBoxScale();
   const cellSize = boxSize + boxGap;
-  const filledRows = Math.max(1, Math.ceil(weeksLived / WEEKS_PER_YEAR));
+  const filledRows = Math.max(
+    1,
+    Math.ceil(agePosition.displayedWeeks / WEEKS_PER_YEAR)
+  );
   const gradientHeight = filledRows * cellSize - boxGap;
+  lifeGrid.classList.remove("is-fill-animated");
 
-  Array.from(lifeBoxes.children).forEach((row, rowIndex) => {
-    const boxes = Array.from(row.children);
-    boxes.forEach((box, weekIndex) => {
-      const globalWeekIndex = rowIndex * WEEKS_PER_YEAR + weekIndex + 1;
-      box.hidden = false;
-      box.style.removeProperty("--filled-grad-height");
-      box.style.removeProperty("--filled-grad-offset");
-      box.classList.remove("filled", "beyond");
-      box.classList.add("upcoming");
-      if (globalWeekIndex <= weeksLived) {
-        box.classList.remove("upcoming");
-        box.classList.add("filled");
-        box.style.setProperty("--filled-grad-height", `${gradientHeight}px`);
-        box.style.setProperty(
-          "--filled-grad-offset",
-          `${-rowIndex * cellSize}px`
-        );
-      } else if (globalWeekIndex > expectancyWeeks) {
-        if (!showBeyond) {
-          box.hidden = true;
-          return;
-        }
-        box.classList.remove("upcoming");
-        box.classList.add("beyond");
+  Array.from(lifeBoxes.children).forEach((box, index) => {
+    const rowIndex = Math.floor(index / WEEKS_PER_YEAR);
+    const columnIndex = index % WEEKS_PER_YEAR;
+    const globalWeekIndex = index + 1;
+    box.hidden = false;
+    box.style.removeProperty("--filled-grad-height");
+    box.style.removeProperty("--filled-grad-offset");
+    box.style.removeProperty("--life-fill-delay");
+    box.classList.remove("filled", "beyond", "is-current-week");
+    box.classList.add("upcoming");
+    if (globalWeekIndex <= agePosition.displayedWeeks) {
+      box.classList.remove("upcoming");
+      box.classList.add("filled");
+      box.style.setProperty(
+        "--life-fill-delay",
+        `${Math.min(1200, rowIndex * 18 + columnIndex * 3)}ms`
+      );
+      box.style.setProperty("--filled-grad-height", `${gradientHeight}px`);
+      box.style.setProperty(
+        "--filled-grad-offset",
+        `${-rowIndex * cellSize}px`
+      );
+      if (globalWeekIndex === agePosition.displayedWeeks) {
+        box.classList.add("is-current-week");
       }
-    });
+    } else if (globalWeekIndex > expectancyWeeks) {
+      if (!showBeyond) {
+        box.hidden = true;
+        return;
+      }
+      box.classList.remove("upcoming");
+      box.classList.add("beyond");
+    }
   });
   lifeGrid.hidden = false;
   lifeGrid.classList.add("is-visible");
   if (weeksLivedHeading) {
     weeksLivedHeading.textContent = `${weeksLived.toLocaleString()} weeks lived (${daysLived.toLocaleString()} days)`;
   }
-  updateNameHeadings();
+  updateResultHeadings();
   lastGridStats = {
     weeksLived,
     daysLived,
+    displayAgeYears: agePosition.ageYears,
+    displayAgeWeek: agePosition.ageWeek,
+    displayedWeeks: agePosition.displayedWeeks,
     expectancyWeeks,
     expectancyYears: expectancyYearsCapped,
     showBeyond,
     totalYears: desiredYears,
-    name: nameInput.value.trim(),
     title: lifeCalendarHeading
       ? lifeCalendarHeading.textContent
-      : "My week map",
+      : "My life map",
   };
+  observeLifeMapFill();
+  prefetchNotableLifespansForAge(agePosition.ageYears);
   // Intentionally skip print-specific scaling to avoid overriding UI sizing.
 }
 
@@ -782,7 +885,7 @@ async function buildClockShareCanvas(state) {
   const headingFontSize = 200;
   const headingLetterSpacing = -0.02;
   const lineHeight = 200;
-  ctx.font = `600 ${headingFontSize}px "Zalando Sans", "Helvetica Neue", sans-serif`;
+  ctx.font = `600 ${headingFontSize}px ${CANVAS_FONT_FAMILY}`;
   drawTextWithSpacing(
     ctx,
     headingLine1.trim(),
@@ -837,7 +940,7 @@ async function buildClockShareCanvas(state) {
   ctx.fill();
 
   ctx.fillStyle = getCssVar("--white", "#ffffff");
-  ctx.font = `500 ${readoutFontSize}px "Zalando Sans", "Helvetica Neue", sans-serif`;
+  ctx.font = `500 ${readoutFontSize}px ${CANVAS_FONT_FAMILY}`;
   ctx.fillText(readoutText, headingX, readoutY);
   ctx.textAlign = "start";
 
@@ -900,7 +1003,7 @@ async function buildClockShareCanvas(state) {
 
   ctx.fillStyle = text;
   ctx.textAlign = "left";
-  ctx.font = '500 55px "Zalando Sans", "Helvetica Neue", sans-serif';
+  ctx.font = `500 55px ${CANVAS_FONT_FAMILY}`;
   const signatureUrl = "lifeclock.cc";
   const signatureTag = "#mylifeclock";
   ctx.fillText(signatureUrl, 60, height - 80);
@@ -923,12 +1026,12 @@ function buildGridShareCanvas(stats) {
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
 
-  const titleText = "My week map";
+  const titleText = "My life map";
 
   ctx.fillStyle = text;
   const titleFontSize = 130;
   const titleLetterSpacing = -0.02;
-  ctx.font = `600 ${titleFontSize}px "Zalando Sans", "Helvetica Neue", sans-serif`;
+  ctx.font = `600 ${titleFontSize}px ${CANVAS_FONT_FAMILY}`;
   const titleWidth = measureTextWithSpacing(
     ctx,
     titleText,
@@ -981,7 +1084,7 @@ function buildGridShareCanvas(stats) {
   ctx.fillStyle = text;
   const statsFontSize = 55;
   const statsLetterSpacing = -0.02;
-  ctx.font = `500 ${statsFontSize}px "Zalando Sans", "Helvetica Neue", sans-serif`;
+  ctx.font = `500 ${statsFontSize}px ${CANVAS_FONT_FAMILY}`;
   const statsY = contentTop + 240;
   drawTextWithSpacing(
     ctx,
@@ -1014,7 +1117,7 @@ function buildGridShareCanvas(stats) {
   }
 
   ctx.fillStyle = text;
-  ctx.font = '500 55px "Zalando Sans", "Helvetica Neue", sans-serif';
+  ctx.font = `500 55px ${CANVAS_FONT_FAMILY}`;
   const signatureUrl = "lifeclock.cc";
   const signatureTag = "#mylifeclock";
   ctx.textAlign = "left";
@@ -1113,54 +1216,689 @@ function previewCanvas(canvas, target) {
   return true;
 }
 
-if (weekTooltip && lifeBoxes) {
-  lifeBoxes.addEventListener("pointermove", (event) => {
-    const target = event.target.closest(".life-box");
-    if (!target || !target.dataset.week || !target.dataset.year) {
-      hideTooltip();
-      return;
+let pinnedTooltipBox = null;
+let selectedWeekBox = null;
+let hoveredWeekBox = null;
+let lastPointerX = null;
+let lastPointerY = null;
+let weekTooltipRenderId = 0;
+
+function getBoxAgeLabel(box) {
+  const years = Math.max(0, Number(box.dataset.year || 1) - 1);
+  const weeks = Number(box.dataset.week || 1);
+  return `At age ${years}, week ${weeks}`;
+}
+
+function getBoxGlobalWeek(box) {
+  const year = Number(box.dataset.year || 1);
+  const week = Number(box.dataset.week || 1);
+  return (year - 1) * WEEKS_PER_YEAR + week;
+}
+
+function getBoxAgeYears(box) {
+  return Math.max(0, Number(box.dataset.year || 1) - 1);
+}
+
+function parseWikidataDate(value) {
+  if (!value) return null;
+  const datePart = String(value).replace(/^\+/, "").split("T")[0];
+  const [year, month, day] = datePart.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function getFirstTimeClaim(entity, property) {
+  const claims = entity && entity.claims && entity.claims[property];
+  if (!Array.isArray(claims)) return null;
+  const claim =
+    claims.find((item) => item.rank === "preferred") ||
+    claims.find((item) => item.rank !== "deprecated");
+  return (
+    claim &&
+    claim.mainsnak &&
+    claim.mainsnak.datavalue &&
+    claim.mainsnak.datavalue.value &&
+    claim.mainsnak.datavalue.value.time
+  );
+}
+
+function getEnwikiUrl(entity) {
+  const title =
+    entity &&
+    entity.sitelinks &&
+    entity.sitelinks.enwiki &&
+    entity.sitelinks.enwiki.title;
+  return title
+    ? `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/\s+/g, "_"))}`
+    : null;
+}
+
+function getSitelinkCount(entity) {
+  return entity && entity.sitelinks
+    ? Object.keys(entity.sitelinks).length
+    : 0;
+}
+
+function getEntityEnglishLabel(entity) {
+  return (
+    entity &&
+    entity.labels &&
+    entity.labels.en &&
+    entity.labels.en.value
+  );
+}
+
+function getEntityEnglishDescription(entity) {
+  return (
+    entity &&
+    entity.descriptions &&
+    entity.descriptions.en &&
+    entity.descriptions.en.value
+  );
+}
+
+function simplifyPersonDescription(description) {
+  if (!description) return "";
+  return description
+    .replace(/\s*\([^)]*\d{3,4}[^)]*\)/g, "")
+    .replace(/\s*,\s*\d{3,4}\s*-\s*\d{3,4}\s*$/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/[.;,\s]+$/g, "")
+    .trim();
+}
+
+function normalizeWikidataEntity(entity) {
+  const born = parseWikidataDate(getFirstTimeClaim(entity, "P569"));
+  const died = parseWikidataDate(getFirstTimeClaim(entity, "P570"));
+  if (!born || !died) return null;
+  const position = getAgePosition(born, died);
+  const url = getEnwikiUrl(entity);
+  const sitelinks = getSitelinkCount(entity);
+  if (!url) return null;
+  if (sitelinks < MIN_NOTABLE_SITELINKS) return null;
+  return {
+    name: getEntityEnglishLabel(entity),
+    url,
+    role: simplifyPersonDescription(getEntityEnglishDescription(entity)),
+    sitelinks,
+    globalWeek: position.displayedWeeks,
+  };
+}
+
+function mergePeopleByWeek(peopleByWeek, person) {
+  if (!person || !person.name || !person.url) return;
+  if (!peopleByWeek.has(person.globalWeek)) {
+    peopleByWeek.set(person.globalWeek, []);
+  }
+  const people = peopleByWeek.get(person.globalWeek);
+  if (!people.some((item) => item.url === person.url)) {
+    people.push({
+      name: person.name,
+      url: person.url,
+      role: person.role,
+      sitelinks: person.sitelinks,
+    });
+  }
+}
+
+function getBoxByGlobalWeek(globalWeek) {
+  if (!lifeBoxes || !globalWeek) return null;
+  return lifeBoxes.children[globalWeek - 1] || null;
+}
+
+function getLivedGlobalWeekLimit() {
+  return lastGridStats && Number.isFinite(lastGridStats.displayedWeeks)
+    ? lastGridStats.displayedWeeks
+    : 0;
+}
+
+function isGlobalWeekLived(globalWeek) {
+  const limit = getLivedGlobalWeekLimit();
+  return limit > 0 && globalWeek <= limit;
+}
+
+function isBoxLived(box) {
+  return isGlobalWeekLived(getBoxGlobalWeek(box));
+}
+
+function markLoadedNotableWeek(globalWeek, people) {
+  const box = getBoxByGlobalWeek(globalWeek);
+  if (!box) return;
+  box.classList.toggle(
+    "has-loaded-notables",
+    isGlobalWeekLived(globalWeek) && Array.isArray(people) && people.length > 0
+  );
+}
+
+function markLoadedNotableWeeks(peopleByWeek) {
+  peopleByWeek.forEach((people, globalWeek) => {
+    markLoadedNotableWeek(globalWeek, people);
+  });
+}
+
+async function fetchCommonsAgeCategoryPage(ageYears, continueToken) {
+  const params = new URLSearchParams({
+    action: "query",
+    format: "json",
+    generator: "categorymembers",
+    gcmtitle: `Category:${ageYears}-year-old_deaths`,
+    gcmnamespace: "14",
+    gcmlimit: String(COMMONS_MEMBERS_PER_PAGE),
+    prop: "pageprops",
+    origin: "*",
+  });
+  if (continueToken) {
+    params.set("gcmcontinue", continueToken);
+  }
+  const response = await fetch(`${COMMONS_API_ENDPOINT}?${params}`);
+  if (!response.ok) {
+    throw new Error(`Commons request failed: ${response.status}`);
+  }
+  const data = await response.json();
+  const pages = data && data.query && data.query.pages ? data.query.pages : {};
+  return {
+    ids: Object.values(pages)
+      .map((page) => page.pageprops && page.pageprops.wikibase_item)
+      .filter(Boolean),
+    continueToken:
+      data && data.continue && data.continue.gcmcontinue
+        ? data.continue.gcmcontinue
+        : null,
+  };
+}
+
+async function fetchWikidataEntities(ids) {
+  if (!ids.length) return [];
+  const params = new URLSearchParams({
+    action: "wbgetentities",
+    format: "json",
+    ids: ids.join("|"),
+    props: "labels|descriptions|claims|sitelinks",
+    languages: "en",
+    origin: "*",
+  });
+  const response = await fetch(`${WIKIDATA_API_ENDPOINT}?${params}`);
+  if (!response.ok) {
+    throw new Error(`Wikidata entities request failed: ${response.status}`);
+  }
+  const data = await response.json();
+  const entities = data && data.entities ? data.entities : {};
+  return Object.values(entities).filter((entity) => !entity.missing);
+}
+
+function chunkItems(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+async function addNotableIdsToWeeks(ids, peopleByWeek, seenIds) {
+  const newIds = ids.filter((id) => {
+    if (!id || seenIds.has(id)) return false;
+    seenIds.add(id);
+    return true;
+  });
+  const idBatches = chunkItems(newIds, WIKIDATA_ENTITY_BATCH_SIZE);
+  const entityArrays = await Promise.all(
+    idBatches.map((batch) => fetchWikidataEntities(batch))
+  );
+  entityArrays
+    .flat()
+    .map(normalizeWikidataEntity)
+    .forEach((person) => mergePeopleByWeek(peopleByWeek, person));
+}
+
+function limitPeopleByWeek(peopleByWeek) {
+  peopleByWeek.forEach((people, globalWeek) => {
+    const limitedPeople = people
+      .sort((a, b) => (b.sitelinks || 0) - (a.sitelinks || 0))
+      .slice(0, MAX_TOOLTIP_NOTABLES);
+    notableLifespansByWeek.set(globalWeek, limitedPeople);
+    peopleByWeek.set(globalWeek, limitedPeople);
+  });
+}
+
+async function loadNotableLifespansForAge(ageYears) {
+  if (notableAgeRequests.has(ageYears)) {
+    return notableAgeRequests.get(ageYears);
+  }
+
+  const request = (async () => {
+    const peopleByWeek = new Map();
+    const seenIds = new Set();
+    let continueToken = null;
+    for (let pageIndex = 0; pageIndex < COMMONS_CATEGORY_PAGE_LIMIT; pageIndex++) {
+      const page = await fetchCommonsAgeCategoryPage(ageYears, continueToken);
+      await addNotableIdsToWeeks(page.ids, peopleByWeek, seenIds);
+      limitPeopleByWeek(peopleByWeek);
+      markLoadedNotableWeeks(peopleByWeek);
+      if (peopleByWeek.size >= NOTABLE_WEEK_COVERAGE_TARGET) break;
+      continueToken = page.continueToken;
+      if (!continueToken) break;
     }
-    weekTooltip.textContent = `Year ${target.dataset.year}, Week ${target.dataset.week}`;
-    weekTooltip.hidden = false;
-    weekTooltip.style.left = `${event.clientX + 12}px`;
-    weekTooltip.style.top = `${event.clientY - 12}px`;
+    limitPeopleByWeek(peopleByWeek);
+    markLoadedNotableWeeks(peopleByWeek);
+    return peopleByWeek;
+  })();
+
+  notableAgeRequests.set(ageYears, request);
+  return request;
+}
+
+async function fetchNotableLifespansForBox(box) {
+  if (!isBoxLived(box)) return [];
+  const peopleByWeek = await loadNotableLifespansForAge(getBoxAgeYears(box));
+  return peopleByWeek.has(getBoxGlobalWeek(box))
+    ? peopleByWeek.get(getBoxGlobalWeek(box)).slice(0, MAX_TOOLTIP_NOTABLES)
+    : [];
+}
+
+async function findNotableLifespansForBox(box) {
+  const globalWeek = getBoxGlobalWeek(box);
+  if (notableLifespansByWeek.has(globalWeek)) {
+    return notableLifespansByWeek.get(globalWeek);
+  }
+  if (notableLifespanRequests.has(globalWeek)) {
+    return notableLifespanRequests.get(globalWeek);
+  }
+  failedNotableLifespanWeeks.delete(globalWeek);
+  const request = fetchNotableLifespansForBox(box)
+    .then((people) => {
+      notableLifespansByWeek.set(globalWeek, people);
+      markLoadedNotableWeek(globalWeek, people);
+      notableLifespanRequests.delete(globalWeek);
+      return people;
+    })
+    .catch((err) => {
+      failedNotableLifespanWeeks.add(globalWeek);
+      notableLifespanRequests.delete(globalWeek);
+      console.warn("Failed to load notable lifespans from Wikidata:", err);
+      throw err;
+    });
+  notableLifespanRequests.set(globalWeek, request);
+  return request;
+}
+
+function positionWeekTooltip(event, box) {
+  const viewportPadding = 8;
+  const tooltipWidth = weekTooltip.offsetWidth || 0;
+  const rect = box.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const top = rect.bottom + 22;
+
+  const minLeft = viewportPadding;
+  const maxLeft = window.innerWidth - tooltipWidth - viewportPadding;
+  const desiredLeft = centerX - tooltipWidth / 2;
+  const left = Math.max(minLeft, Math.min(desiredLeft, maxLeft));
+  weekTooltip.style.left = `${left}px`;
+  weekTooltip.style.top = `${top}px`;
+  weekTooltip.style.setProperty(
+    "--tooltip-arrow-left",
+    `${Math.max(12, Math.min(centerX - left, tooltipWidth - 12))}px`
+  );
+}
+
+function repositionPinnedTooltip() {
+  if (!pinnedTooltipBox || weekTooltip.hidden) return;
+  positionWeekTooltip({}, pinnedTooltipBox);
+}
+
+function appendTooltipStatus(text, isLoading = false) {
+  const status = document.createElement("div");
+  status.className = "week-tooltip-status";
+  status.classList.toggle("is-loading", isLoading);
+  status.textContent = text;
+  weekTooltip.appendChild(status);
+}
+
+function prefetchNotableLifespansForAge(ageYears) {
+  if (!Number.isFinite(ageYears)) return;
+  loadNotableLifespansForAge(ageYears).catch((err) => {
+    console.warn("Failed to preload notable lifespans from Wikidata:", err);
+  });
+}
+
+function renderWeekTooltipContent(
+  box,
+  event,
+  shouldPin,
+  markers,
+  showEmptyStatus = true
+) {
+  weekTooltip.classList.toggle("is-pinned", shouldPin);
+  weekTooltip.replaceChildren();
+
+  const ageLine = document.createElement("div");
+  ageLine.className = "week-tooltip-age";
+  ageLine.textContent = getBoxAgeLabel(box);
+  weekTooltip.appendChild(ageLine);
+
+  markers.forEach((marker) => {
+    const personLine = document.createElement("div");
+    personLine.className = "week-tooltip-person-line";
+
+    const link = document.createElement("a");
+    link.className = "week-tooltip-person-name";
+    link.href = marker.url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = marker.name;
+    personLine.appendChild(link);
+
+    if (marker.role) {
+      const separator = document.createElement("span");
+      separator.className = "week-tooltip-separator";
+      separator.textContent = " • ";
+      personLine.appendChild(separator);
+
+      const roleSpan = document.createElement("span");
+      roleSpan.className = "week-tooltip-role";
+      roleSpan.textContent = marker.role;
+      personLine.appendChild(roleSpan);
+    }
+
+    weekTooltip.appendChild(personLine);
   });
 
-  lifeBoxes.addEventListener("pointerleave", hideTooltip);
+  if (showEmptyStatus && markers.length === 0) {
+    appendTooltipStatus("No notable lives here.");
+  }
+
+  weekTooltip.hidden = false;
+  positionWeekTooltip(event, box);
+}
+
+function renderWeekTooltip(box, event, shouldPin = false) {
+  const renderId = ++weekTooltipRenderId;
+  const globalWeek = getBoxGlobalWeek(box);
+  if (!isGlobalWeekLived(globalWeek)) {
+    renderWeekTooltipContent(box, event, shouldPin, [], false);
+    return;
+  }
+
+  if (notableLifespansByWeek.has(globalWeek)) {
+    renderWeekTooltipContent(
+      box,
+      event,
+      shouldPin,
+      notableLifespansByWeek.get(globalWeek)
+    );
+    return;
+  }
+
+  if (failedNotableLifespanWeeks.has(globalWeek)) {
+    renderWeekTooltipContent(box, event, shouldPin, [], false);
+    appendTooltipStatus("Could not load notable lives.");
+    positionWeekTooltip(event, box);
+    return;
+  }
+
+  weekTooltip.classList.toggle("is-pinned", shouldPin);
+  weekTooltip.replaceChildren();
+
+  const ageLine = document.createElement("div");
+  ageLine.className = "week-tooltip-age";
+  ageLine.textContent = getBoxAgeLabel(box);
+  weekTooltip.appendChild(ageLine);
+  appendTooltipStatus("Loading notable lives...", true);
+
+  weekTooltip.hidden = false;
+  positionWeekTooltip(event, box);
+
+  findNotableLifespansForBox(box)
+    .then((markers) => {
+      if (renderId !== weekTooltipRenderId) return;
+      if (!shouldPin && hoveredWeekBox !== box) return;
+      if (shouldPin && pinnedTooltipBox !== box) return;
+      renderWeekTooltipContent(box, event, shouldPin, markers);
+    })
+    .catch(() => {
+      if (renderId !== weekTooltipRenderId) return;
+      if (!shouldPin && hoveredWeekBox !== box) return;
+      if (shouldPin && pinnedTooltipBox !== box) return;
+      renderWeekTooltipContent(box, event, shouldPin, [], false);
+      appendTooltipStatus("Could not load notable lives.");
+      positionWeekTooltip(event, box);
+    });
+}
+
+function selectWeekBox(box) {
+  if (selectedWeekBox && selectedWeekBox !== box) {
+    selectedWeekBox.classList.remove("is-selected");
+  }
+  selectedWeekBox = box;
+  selectedWeekBox.classList.add("is-selected");
+  lifeBoxes.classList.add("has-selection");
+}
+
+function clearSelectedWeekBox() {
+  if (selectedWeekBox) {
+    selectedWeekBox.classList.remove("is-selected");
+  }
+  selectedWeekBox = null;
+  lifeBoxes.classList.remove("has-selection");
+}
+
+function isPointerInsideBox(event, box) {
+  if (!box) return false;
+  const rect = box.getBoundingClientRect();
+  return (
+    event.clientX >= rect.left &&
+    event.clientX <= rect.right &&
+    event.clientY >= rect.top &&
+    event.clientY <= rect.bottom
+  );
+}
+
+function isPointerInsideElement(event, element) {
+  if (!element) return false;
+  const rect = element.getBoundingClientRect();
+  return (
+    event.clientX >= rect.left &&
+    event.clientX <= rect.right &&
+    event.clientY >= rect.top &&
+    event.clientY <= rect.bottom
+  );
+}
+
+function hideHoverTooltip() {
+  hoveredWeekBox = null;
+  hideTooltip();
+}
+
+function rememberPointer(event) {
+  if (typeof event.clientX !== "number" || typeof event.clientY !== "number") {
+    return;
+  }
+  lastPointerX = event.clientX;
+  lastPointerY = event.clientY;
+}
+
+function getBoxAtLastPointer() {
+  if (lastPointerX === null || lastPointerY === null) return null;
+  const element = document.elementFromPoint(lastPointerX, lastPointerY);
+  return element ? element.closest(".life-box") : null;
+}
+
+function syncHoverTooltipVisibility() {
+  if (pinnedTooltipBox || weekTooltip.hidden) return;
+  if (!hoveredWeekBox || getBoxAtLastPointer() !== hoveredWeekBox) {
+    hideHoverTooltip();
+  }
+}
+
+function hideHoverTooltipIfUnpinned() {
+  if (!pinnedTooltipBox) {
+    hideHoverTooltip();
+  }
+}
+
+function unpinWeekTooltip() {
+  pinnedTooltipBox = null;
+  hoveredWeekBox = null;
+  clearSelectedWeekBox();
+  weekTooltip.classList.remove("is-pinned");
+  hideTooltip();
+}
+
+if (weekTooltip && lifeBoxes) {
+  lifeBoxes.addEventListener("pointerover", (event) => {
+    if (pinnedTooltipBox) return;
+    rememberPointer(event);
+    const target = event.target.closest(".life-box");
+    if (!target || !target.dataset.week || !target.dataset.year) {
+      hideHoverTooltip();
+      return;
+    }
+    hoveredWeekBox = target;
+    renderWeekTooltip(target, event);
+  });
+
+  lifeBoxes.addEventListener("pointerout", (event) => {
+    if (pinnedTooltipBox) return;
+    rememberPointer(event);
+    const target = event.target.closest(".life-box");
+    if (!target) return;
+    const nextBox = event.relatedTarget
+      ? event.relatedTarget.closest(".life-box")
+      : null;
+    if (nextBox === target) return;
+    hideHoverTooltip();
+  });
+
+  window.addEventListener("pointermove", (event) => {
+    rememberPointer(event);
+    if (weekTooltip.hidden) return;
+    syncHoverTooltipVisibility();
+    if (weekTooltip.hidden) return;
+    if (pinnedTooltipBox) {
+      return;
+    }
+    const elementAtPointer = document.elementFromPoint(event.clientX, event.clientY);
+    const boxAtPointer = elementAtPointer
+      ? elementAtPointer.closest(".life-box")
+      : null;
+    if (!boxAtPointer || boxAtPointer !== hoveredWeekBox) {
+      hideHoverTooltip();
+    }
+  });
+
+  lifeBoxes.addEventListener("click", (event) => {
+    const target = event.target.closest(".life-box");
+    if (!target) return;
+    if (pinnedTooltipBox && pinnedTooltipBox !== target) {
+      unpinWeekTooltip();
+      return;
+    }
+    pinnedTooltipBox = target;
+    selectWeekBox(target);
+    renderWeekTooltip(target, event, true);
+  });
+
+  lifeBoxes.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const target = event.target.closest(".life-box");
+    if (!target) return;
+    event.preventDefault();
+    if (pinnedTooltipBox && pinnedTooltipBox !== target) {
+      unpinWeekTooltip();
+      return;
+    }
+    pinnedTooltipBox = target;
+    selectWeekBox(target);
+    renderWeekTooltip(target, event, true);
+  });
+
+  lifeBoxes.addEventListener("pointerleave", () => {
+    if (!pinnedTooltipBox) {
+      hideHoverTooltip();
+    }
+  });
+
+  lifeBoxes.addEventListener("mouseleave", () => {
+    if (!pinnedTooltipBox) {
+      hideHoverTooltip();
+    }
+  });
+
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (!pinnedTooltipBox) {
+        hideHoverTooltip();
+        return;
+      }
+      repositionPinnedTooltip();
+    },
+    true
+  );
+
+  window.addEventListener(
+    "wheel",
+    (event) => {
+      rememberPointer(event);
+      if (!pinnedTooltipBox) {
+        hideHoverTooltip();
+      }
+    },
+    { passive: true }
+  );
+
+  window.addEventListener("resize", () => {
+    if (pinnedTooltipBox) {
+      repositionPinnedTooltip();
+      return;
+    }
+    hideHoverTooltipIfUnpinned();
+  });
+  window.addEventListener("blur", hideHoverTooltipIfUnpinned);
+
+  weekTooltip.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+
+  window.addEventListener("click", (event) => {
+    if (
+      pinnedTooltipBox &&
+      !weekTooltip.contains(event.target) &&
+      !pinnedTooltipBox.contains(event.target)
+    ) {
+      unpinWeekTooltip();
+    }
+  });
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && pinnedTooltipBox) {
+      unpinWeekTooltip();
+    }
+  });
 }
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  applyQaDefaults();
   syncDobValue();
   renderFromDob(dobInput.value);
 });
 
-if (clockFormatToggle) {
-  const initialPosition = clockFormat === "12" ? "100%" : "0%";
-  clockFormatToggle.style.setProperty("--toggle-pos", initialPosition);
-  clockFormatToggle.addEventListener("click", (event) => {
-    const target = event.target.closest("[data-clock-format]");
-    if (!target) return;
-    setClockFormat(target.dataset.clockFormat);
-  });
-}
-
 function renderFromDob(value) {
-  if (!form.checkValidity()) {
-    form.reportValidity();
+  const validation = getDobValidation(value);
+  if (validation.message) {
+    showDobError(validation.message);
+    dobInput.focus();
     return;
   }
-  const parsed = parseDob(value);
-  if (!parsed || parsed > today || parsed < minAllowedDate) {
-    form.reportValidity();
-    return;
-  }
-  const ageYears = calculateAgeYears(parsed);
-  const dobDate = parsed;
+  hideDobError();
+  const dobDate = validation.date;
+  const ageYears = calculateAgeYears(dobDate);
   lastDobDate = dobDate;
   const ratio = ageYears / lifeExpectancyYears;
-  updateClock(ratio);
+  const shouldDeferClockMotion = !document.body.classList.contains("has-results");
+  if (shouldDeferClockMotion) {
+    document.body.classList.add("is-flip-pending");
+  }
+  updateClock(ratio, { deferMotion: shouldDeferClockMotion });
   updateLifeGrid(ageYears, dobDate);
   flipFormShell(true);
   if (typeof window.updateSharePreviewOverlay === "function") {
@@ -1174,15 +1912,24 @@ function hideVisuals() {
   lifeGrid.hidden = true;
   lifeGrid.classList.remove("is-visible");
   flipFormShell(false);
-  document.body.style.backgroundImage = defaultGradient;
   hideTooltip();
-  updateNameHeadings();
+  updateResultHeadings();
 }
 
 if (dobInput) {
+  dobInput.addEventListener("beforeinput", handleDobBoundaryBackspace);
+
   dobInput.addEventListener("input", () => {
     syncDobValue();
-    if (!dobInput.value) {
+    if (dobErrorTooltip && !dobErrorTooltip.hidden) {
+      const validation = getDobValidation(dobInput.value);
+      if (validation.message) {
+        showDobError(validation.message);
+      } else {
+        hideDobError();
+      }
+    }
+    if (!QA_MODE && !dobInput.value) {
       hideVisuals();
     }
   });
@@ -1190,34 +1937,27 @@ if (dobInput) {
 
 function reRenderIfHasResults() {
   if (!document.body.classList.contains("has-results")) return;
-  if (!dobInput.value.trim() || !nameInput.value.trim()) return;
+  if (!QA_MODE && !dobInput.value.trim()) return;
   renderFromDob(dobInput.value);
 }
 
 function applyQaDefaults() {
   if (!QA_MODE) return;
-  if (!nameInput.value.trim()) nameInput.value = QA_FAKE_NAME;
-  if (!dobInput.value.trim()) dobInput.value = QA_FAKE_DOB;
   syncDobValue();
-}
-
-if (nameInput) {
-  nameInput.addEventListener("input", () => {
-    updateNameHeadings();
-  });
-  nameInput.addEventListener("change", reRenderIfHasResults);
 }
 
 if (dobInput) {
   dobInput.addEventListener("change", () => {
     syncDobValue();
+    if (dobErrorTooltip && !dobErrorTooltip.hidden) {
+      const validation = getDobValidation(dobInput.value);
+      if (validation.message) {
+        showDobError(validation.message);
+      } else {
+        hideDobError();
+      }
+    }
     reRenderIfHasResults();
-  });
-}
-
-if (printBtn) {
-  printBtn.addEventListener("click", () => {
-    downloadGridPdf();
   });
 }
 
@@ -1252,93 +1992,12 @@ async function saveBlob(blob, filename, mimeType) {
   return true;
 }
 
-async function downloadGridPdf() {
-  if (!document.body.classList.contains("has-results")) {
-    alert("Submit your info first to generate the PDF.");
-    return;
-  }
-  if (!window.html2canvas || !window.jspdf) {
-    alert("PDF tools failed to load. Please refresh and try again.");
-    return;
-  }
-  const grid = document.getElementById("life-grid");
-  const gridInner = grid ? grid.querySelector(".life-grid-inner") : null;
-  if (!gridInner) return;
-  const gridWidth = gridInner.scrollWidth;
-  const gridHeight = gridInner.scrollHeight;
-  const pdfFrame = document.createElement("div");
-  pdfFrame.className = "pdf-frame";
-  const gridParent = gridInner.parentElement;
-  if (!gridParent) return;
-  gridParent.insertBefore(pdfFrame, gridInner);
-  pdfFrame.appendChild(gridInner);
-  pdfFrame.style.width = `${gridWidth + 30}px`;
-  pdfFrame.style.height = `${gridHeight + 30}px`;
-  const tenMarks = gridInner.querySelectorAll(".life-box.ten-mark.filled");
-  tenMarks.forEach((box) => {
-    if (box.querySelector(".pdf-xmark")) return;
-    const mark = document.createElement("span");
-    mark.className = "pdf-xmark";
-    mark.innerHTML =
-      "<svg viewBox='0 0 10 10' aria-hidden='true'><path d='M2 2l6 6M8 2L2 8' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg>";
-    box.appendChild(mark);
-  });
-  document.body.classList.add("pdf-exporting");
-  try {
-    await Promise.resolve();
-    if (document.fonts && document.fonts.ready) {
-      await document.fonts.ready;
-    }
-    const canvas = await window.html2canvas(pdfFrame, {
-      backgroundColor: "#ffffff",
-      scale: 3,
-      useCORS: true,
-    });
-    const { jsPDF } = window.jspdf;
-    const orientation =
-      canvas.width >= canvas.height ? "landscape" : "portrait";
-    const pdf = new jsPDF({
-      orientation,
-      unit: "px",
-      format: [
-        Math.round(canvas.width),
-        Math.round(canvas.height),
-      ],
-    });
-    pdf.addImage(
-      canvas.toDataURL("image/png"),
-      "PNG",
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
-    const blob = pdf.output("blob");
-    const filenameBase = fileSafeName(nameInput ? nameInput.value : "");
-    await saveBlob(
-      blob,
-      `${filenameBase}-lifemap-print.pdf`,
-      "application/pdf"
-    );
-  } catch (err) {
-    console.error("PDF export failed:", err);
-    alert("PDF export failed. Check the console for details.");
-  } finally {
-    tenMarks.forEach((box) => {
-      const mark = box.querySelector(".pdf-xmark");
-      if (mark) mark.remove();
-    });
-    gridParent.insertBefore(gridInner, pdfFrame);
-    pdfFrame.remove();
-    document.body.classList.remove("pdf-exporting");
-  }
-}
-
-
 function refreshLifeGridScale(shouldScaleForPrint = false) {
   if (!document.body.classList.contains("has-results")) return;
-  if (!dobInput.value.trim()) return;
-  renderFromDob(dobInput.value);
+  if (!QA_MODE && !dobInput.value.trim()) return;
+  if (lastDobDate) {
+    updateLifeGrid(calculateAgeYears(lastDobDate), lastDobDate);
+  }
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       setPrintBoxScale(shouldScaleForPrint);
@@ -1448,25 +2107,16 @@ function buildGridShareText(includeEmoji = false) {
 }
 
 function buildSocialShareText(includeEmoji = false) {
-  const name = possessiveName();
-  const label = name || "My";
   const readout = lastClockState ? lastClockState.readout : "xx:xx";
   const weeks = lastGridStats ? lastGridStats.weeksLived.toLocaleString() : "—";
   const timeEmoji = includeEmoji ? "⏰ " : "";
   const weekEmoji = includeEmoji ? "📅 " : "";
   return (
-    `${label} life stats right now:\n` +
+    "My life stats right now:\n" +
     `${timeEmoji}${readout} · ${weekEmoji}Week ${weeks}\n` +
     "Check yours at https://lifeclock.cc\n" +
     "#mylifeclock"
   );
-}
-
-function fileSafeName(value) {
-  const base = value || "my";
-  const trimmed = base.trim().toLowerCase();
-  const cleaned = trimmed.replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "");
-  return cleaned || "my";
 }
 
 async function copyTextToClipboard(text) {
@@ -1521,7 +2171,7 @@ function handleShareMenuClick(event) {
     }
     buildClockShareCanvas(lastClockState).then((canvas) => {
       const shareText = encodeURIComponent(buildClockShareText(target === "x"));
-      const filenameBase = fileSafeName(nameInput ? nameInput.value : "");
+      const filenameBase = "my";
       const clockFilename = `${filenameBase}-lifeclock.png`;
       if (target === "download") {
         saveImageFromCanvas(canvas, clockFilename, buildClockShareText(true));
@@ -1548,7 +2198,7 @@ function handleShareMenuClick(event) {
     }
     const canvas = buildGridShareCanvas(lastGridStats);
     const shareText = encodeURIComponent(buildGridShareText(target === "x"));
-    const filenameBase = fileSafeName(nameInput ? nameInput.value : "");
+    const filenameBase = "my";
     const gridFilename = `${filenameBase}-lifemap.png`;
     if (target === "download") {
       saveImageFromCanvas(canvas, gridFilename, buildGridShareText(true));
@@ -1570,66 +2220,8 @@ function handleShareMenuClick(event) {
   toggleShareMenu(panel, false);
 }
 
-if (clockSharePanel) {
-  clockSharePanel.addEventListener("click", handleShareMenuClick);
-}
-
-if (gridSharePanel) {
-  gridSharePanel.addEventListener("click", handleShareMenuClick);
-}
-
 if (resultsSharePanel) {
   resultsSharePanel.addEventListener("click", handleShareMenuClick);
-  setShareSource(lastShareSource);
-}
-
-if (clockPanel) {
-  clockPanel.addEventListener("click", () => setShareSource("clock"));
-  clockPanel.addEventListener("focusin", () => setShareSource("clock"));
-}
-
-if (lifeGrid) {
-  lifeGrid.addEventListener("click", () => setShareSource("grid"));
-  lifeGrid.addEventListener("focusin", () => setShareSource("grid"));
-}
-
-window.addEventListener("click", (event) => {
-  if (
-    gridSharePanel &&
-    !gridSharePanel.hidden &&
-    !gridSharePanel.contains(event.target)
-  ) {
-    toggleShareMenu(gridSharePanel, false);
-  }
-});
-
-window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    toggleShareMenu(gridSharePanel, false);
-  }
-});
-
-function initBlobWiggle() {
-  const blobs = Array.from(document.querySelectorAll(".bg-blobs .blob"));
-  if (!blobs.length) return;
-
-  const randomBetween = (min, max) => Math.random() * (max - min) + min;
-  const update = () => {
-    blobs.forEach((blob) => {
-      const x = randomBetween(-160, 160);
-      const y = randomBetween(-120, 120);
-      const scale = randomBetween(0.9, 1.6);
-      const duration = randomBetween(1200, 2200);
-
-      blob.style.setProperty("--blob-x", `${x}px`);
-      blob.style.setProperty("--blob-y", `${y}px`);
-      blob.style.setProperty("--blob-scale", scale.toFixed(3));
-      blob.style.transitionDuration = `${Math.round(duration)}ms`;
-    });
-  };
-
-  update();
-  setInterval(update, 1800);
 }
 
 function initShareTitleWave() {
@@ -1655,20 +2247,21 @@ function initShareTitleWave() {
 
 window.addEventListener("resize", () => {
   if (document.body.classList.contains("has-results")) {
-    flipFormShell(true);
-    if (lastDobDate) {
-      updateLifeGrid(calculateAgeYears(lastDobDate), lastDobDate);
-    }
+    hideHoverTooltipIfUnpinned();
+    updateLifeBoxScale();
   }
 });
 
-updateNameHeadings();
-initBlobWiggle();
+updateResultHeadings();
+if (copyrightYear) {
+  const startYear = 2025;
+  const currentYear = new Date().getFullYear();
+  copyrightYear.textContent =
+    currentYear > startYear ? `${startYear} - ${currentYear}` : String(startYear);
+}
 initShareTitleWave();
 
-if (QA_MODE) {
+if (QA_MODE && !document.body.classList.contains("has-results")) {
   applyQaDefaults();
   renderFromDob(dobInput.value);
 }
-
-fetchLifeExpectancy();
