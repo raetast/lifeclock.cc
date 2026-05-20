@@ -7,7 +7,6 @@ const minuteHand = document.getElementById("minute-hand");
 const dayNightDisk = document.getElementById("day-night-disk");
 const clockCaption = document.getElementById("clock-caption");
 const weeksLivedHeading = document.getElementById("weeks-lived-heading");
-const lifeProgressHeading = document.getElementById("life-progress-heading");
 const lifeCalendarHeading = document.getElementById("life-calendar-heading");
 const lifeGrid = document.getElementById("life-grid");
 const lifeBoxes = document.getElementById("life-boxes");
@@ -33,6 +32,8 @@ const NOTABLE_WEEK_COVERAGE_TARGET = 48;
 const WIKIDATA_ENTITY_BATCH_SIZE = 50;
 const MAX_TOOLTIP_NOTABLES = 3;
 const MIN_NOTABLE_SITELINKS = 1;
+const NOTABLE_CACHE_PREFIX = "lifeClock:notables:v1:";
+const NOTABLE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 let currentYearsDisplayed = 0;
 const DAY_MS = 24 * 60 * 60 * 1000;
 let lastGridStats = null;
@@ -49,7 +50,6 @@ const PENDULUM_SWAY_DURATION_MS = 1000;
 const PENDULUM_CENTER_OFFSET_MS = PENDULUM_SWAY_DURATION_MS / 2;
 const MOBILE_NOTABLE_QUERY = "(max-width: 639px)";
 const NON_DESKTOP_NOTABLE_QUERY = "(max-width: 1023px)";
-const RESULT_DOB_STORAGE_KEY = "lifeClock:lastDob";
 let flipSettleTimer = null;
 let flipStartTimer = null;
 let clockMotionTimer = null;
@@ -76,10 +76,6 @@ function matchesMediaQuery(query) {
   return typeof window.matchMedia === "function" && window.matchMedia(query).matches;
 }
 
-function shouldDisableNotableTooltips() {
-  return matchesMediaQuery(MOBILE_NOTABLE_QUERY);
-}
-
 function shouldUseHoverNotableTooltips() {
   return (
     !matchesMediaQuery(NON_DESKTOP_NOTABLE_QUERY) &&
@@ -89,22 +85,6 @@ function shouldUseHoverNotableTooltips() {
 
 function shouldUseCompactLifeCopy() {
   return matchesMediaQuery(MOBILE_NOTABLE_QUERY);
-}
-
-function rememberResultDob(value) {
-  try {
-    sessionStorage.setItem(RESULT_DOB_STORAGE_KEY, value);
-  } catch (err) {
-    // Ignore storage failures; the result still renders for this page load.
-  }
-}
-
-function getRememberedResultDob() {
-  try {
-    return sessionStorage.getItem(RESULT_DOB_STORAGE_KEY) || "";
-  } catch (err) {
-    return "";
-  }
 }
 
 function calculateAgeYears(dateValue) {
@@ -610,13 +590,6 @@ function updateLifeGrid(ageYears, dobDate) {
   lifeGrid.classList.add("is-visible");
   if (weeksLivedHeading) {
     weeksLivedHeading.textContent = `${weeksLived.toLocaleString()} weeks lived (${daysLived.toLocaleString()} days)`;
-  }
-  if (lifeProgressHeading) {
-    const lifePercent = Math.min(
-      999.9,
-      (agePosition.displayedWeeks / expectancyWeeks) * 100
-    );
-    lifeProgressHeading.textContent = `${lifePercent.toFixed(1)}% of a ${lifeExpectancyYears}-year life`;
   }
   updateResultHeadings();
   lastGridStats = {
@@ -1426,6 +1399,66 @@ function markLoadedNotableWeeks(peopleByWeek) {
   });
 }
 
+function getNotableCacheKey(ageYears) {
+  return `${NOTABLE_CACHE_PREFIX}${ageYears}`;
+}
+
+function cachePeopleByWeek(ageYears, peopleByWeek) {
+  if (!peopleByWeek || !peopleByWeek.size) return;
+  try {
+    const weeks = Array.from(peopleByWeek.entries()).map(
+      ([globalWeek, people]) => [
+        globalWeek,
+        people.map(({ name, url, role, sitelinks }) => ({
+          name,
+          url,
+          role,
+          sitelinks,
+        })),
+      ]
+    );
+    localStorage.setItem(
+      getNotableCacheKey(ageYears),
+      JSON.stringify({ cachedAt: Date.now(), weeks })
+    );
+  } catch (err) {
+    // Cache failures should never block tooltip data.
+  }
+}
+
+function readCachedPeopleByWeek(ageYears) {
+  try {
+    const raw = localStorage.getItem(getNotableCacheKey(ageYears));
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (
+      !cached ||
+      !Array.isArray(cached.weeks) ||
+      Date.now() - Number(cached.cachedAt || 0) > NOTABLE_CACHE_TTL_MS
+    ) {
+      localStorage.removeItem(getNotableCacheKey(ageYears));
+      return null;
+    }
+    const peopleByWeek = new Map();
+    cached.weeks.forEach(([globalWeek, people]) => {
+      const week = Number(globalWeek);
+      if (!Number.isFinite(week) || !Array.isArray(people)) return;
+      const validPeople = people.filter(
+        (person) => person && person.name && person.url
+      );
+      if (!validPeople.length) return;
+      peopleByWeek.set(week, validPeople.slice(0, MAX_TOOLTIP_NOTABLES));
+      notableLifespansByWeek.set(
+        week,
+        validPeople.slice(0, MAX_TOOLTIP_NOTABLES)
+      );
+    });
+    return peopleByWeek.size ? peopleByWeek : null;
+  } catch (err) {
+    return null;
+  }
+}
+
 async function fetchCommonsAgeCategoryPage(ageYears, continueToken) {
   const params = new URLSearchParams({
     action: "query",
@@ -1515,6 +1548,12 @@ async function loadNotableLifespansForAge(ageYears) {
     return notableAgeRequests.get(ageYears);
   }
 
+  const cachedPeopleByWeek = readCachedPeopleByWeek(ageYears);
+  if (cachedPeopleByWeek) {
+    markLoadedNotableWeeks(cachedPeopleByWeek);
+    return cachedPeopleByWeek;
+  }
+
   const request = (async () => {
     const peopleByWeek = new Map();
     const seenIds = new Set();
@@ -1530,6 +1569,7 @@ async function loadNotableLifespansForAge(ageYears) {
     }
     limitPeopleByWeek(peopleByWeek);
     markLoadedNotableWeeks(peopleByWeek);
+    cachePeopleByWeek(ageYears, peopleByWeek);
     return peopleByWeek;
   })();
 
@@ -1795,7 +1835,7 @@ function unpinWeekTooltip() {
 
 if (weekTooltip && lifeBoxes) {
   lifeBoxes.addEventListener("pointerover", (event) => {
-    if (!shouldUseHoverNotableTooltips() || shouldDisableNotableTooltips()) return;
+    if (!shouldUseHoverNotableTooltips()) return;
     if (pinnedTooltipBox) return;
     rememberPointer(event);
     const target = event.target.closest(".life-box");
@@ -1808,7 +1848,7 @@ if (weekTooltip && lifeBoxes) {
   });
 
   lifeBoxes.addEventListener("pointerout", (event) => {
-    if (!shouldUseHoverNotableTooltips() || shouldDisableNotableTooltips()) return;
+    if (!shouldUseHoverNotableTooltips()) return;
     if (pinnedTooltipBox) return;
     rememberPointer(event);
     const target = event.target.closest(".life-box");
@@ -1822,10 +1862,6 @@ if (weekTooltip && lifeBoxes) {
 
   window.addEventListener("pointermove", (event) => {
     rememberPointer(event);
-    if (shouldDisableNotableTooltips()) {
-      unpinWeekTooltip();
-      return;
-    }
     if (!shouldUseHoverNotableTooltips()) {
       if (!pinnedTooltipBox) hideHoverTooltip();
       return;
@@ -1846,10 +1882,6 @@ if (weekTooltip && lifeBoxes) {
   });
 
   lifeBoxes.addEventListener("click", (event) => {
-    if (shouldDisableNotableTooltips()) {
-      unpinWeekTooltip();
-      return;
-    }
     const target = event.target.closest(".life-box");
     if (!target) return;
     if (pinnedTooltipBox && pinnedTooltipBox !== target) {
@@ -1862,7 +1894,6 @@ if (weekTooltip && lifeBoxes) {
   });
 
   lifeBoxes.addEventListener("keydown", (event) => {
-    if (shouldDisableNotableTooltips()) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     const target = event.target.closest(".life-box");
     if (!target) return;
@@ -1957,7 +1988,6 @@ function renderFromDob(value) {
   hideDobError();
   const dobDate = validation.date;
   const ageYears = calculateAgeYears(dobDate);
-  rememberResultDob(formatDobInput(value));
   lastDobDate = dobDate;
   const ratio = ageYears / lifeExpectancyYears;
   const shouldDeferClockMotion = !document.body.classList.contains("has-results");
@@ -2330,11 +2360,4 @@ initShareTitleWave();
 if (QA_MODE && !document.body.classList.contains("has-results")) {
   applyQaDefaults();
   renderFromDob(dobInput.value);
-} else if (!document.body.classList.contains("has-results")) {
-  const rememberedDob = getRememberedResultDob();
-  if (rememberedDob) {
-    dobInput.value = rememberedDob;
-    syncDobValue();
-    renderFromDob(dobInput.value);
-  }
 }

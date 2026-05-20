@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,200..900;1,6..96,200..900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap");
 
 :root {
   --page-bg: #f7f5ef;
@@ -369,8 +369,8 @@ body.has-results .clock-flip-back {
   flex-direction: column;
   align-items: center;
   gap: 0;
-  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
-  font-weight: 600;
+  font-family: "Bodoni Moda", "Times New Roman", serif;
+  font-weight: 200;
   white-space: normal;
   transform: translateY(clamp(-10px, -1.8vmin, -6px));
 }
@@ -380,8 +380,7 @@ body.has-results .clock-flip-back {
   text-align: center;
   margin-bottom: clamp(3px, 0.8vmin, 6px);
   font-size: var(--clock-small-type);
-  font-weight: 500;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.3em;
   text-transform: uppercase;
 }
 
@@ -431,7 +430,7 @@ body.has-results .clock-flip-back {
   box-shadow: none;
   font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
   font-size: var(--clock-small-type);
-  letter-spacing: 0.01em;
+  font-weight: 300;
   text-align: center;
 }
 
@@ -881,34 +880,8 @@ body.has-results .clock-panel.is-visible {
     border-color: rgba(var(--text-rgb), 0.08);
   }
 
-  .life-box.has-loaded-notables::before {
-    display: none;
-  }
-
   .life-box {
-    border-radius: 0;
     border-color: rgba(var(--muted-rgb), 0.24);
-    pointer-events: none;
-  }
-
-  .life-box.filled {
-    border-radius: 0;
-  }
-
-  .life-boxes.has-selection .life-box,
-  .life-boxes.has-selection .life-box:not(.is-selected),
-  .life-boxes.has-selection .life-box.is-selected,
-  .life-box:hover,
-  .life-box:focus-visible,
-  .life-box.is-selected,
-  .life-box.filled:hover,
-  .life-box.filled:focus-visible,
-  .life-box.filled.is-selected {
-    opacity: 1;
-    border-color: rgba(var(--muted-rgb), 0.24);
-    box-shadow: none !important;
-    transform: none;
-    z-index: auto;
   }
 }
 
@@ -1358,20 +1331,6 @@ body.is-clock-motion-reset .day-night-disk {
   margin: 0;
 }
 
-.life-progress {
-  display: none;
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.25;
-}
-
-@media (max-width: 639px) {
-  .life-progress {
-    display: block;
-  }
-}
-
 .life-boxes {
   max-width: 100%;
   display: grid;
@@ -1494,15 +1453,6 @@ body.is-clock-motion-reset .day-night-disk {
   }
 }
 
-.download-icon {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  background-color: currentColor;
-  mask: url('../assets/download_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg') center/contain no-repeat;
-  -webkit-mask: url('../assets/download_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg') center/contain no-repeat;
-}
-
 .x-icon,
 .threads-icon {
   display: inline-block;
@@ -1528,6 +1478,7 @@ body.is-clock-motion-reset .day-night-disk {
   background-position: 0 var(--filled-grad-offset, 0);
   background-repeat: no-repeat;
   border: none;
+  cursor: pointer;
   transition:
     transform 0.18s ease,
     background-color 0.18s ease;
@@ -1596,24 +1547,6 @@ body.is-clock-motion-reset .day-night-disk {
     0 14px 30px rgba(var(--text-rgb), 0.42) !important;
   transform: scale(1.7);
   z-index: 7;
-}
-
-@media (max-width: 639px) {
-  .life-boxes.has-selection .life-box,
-  .life-boxes.has-selection .life-box:not(.is-selected),
-  .life-boxes.has-selection .life-box.is-selected,
-  .life-box:hover,
-  .life-box:focus-visible,
-  .life-box.is-selected,
-  .life-box.filled:hover,
-  .life-box.filled:focus-visible,
-  .life-box.filled.is-selected {
-    opacity: 1;
-    border-color: rgba(var(--muted-rgb), 0.24) !important;
-    box-shadow: none !important;
-    transform: none;
-    z-index: auto;
-  }
 }
 
 .life-box.beyond {

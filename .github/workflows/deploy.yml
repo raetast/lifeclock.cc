@@ -20,7 +20,16 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftp
-          local-dir: ./           # Local directory to upload
-          server-dir: /www/lifeclock.cc/  # Server directory to upload to
+          local-dir: ./
+          server-dir: /www/lifeclock.cc/
+          exclude: |
+            **/.DS_Store
+            **/.git*
+            **/.git*/**
+            **/.github/**
+            **/_design/**
+            css/preview.css
+            js/local-config.js
+            js/preview.js
           # If the port is not the default FTP port (21), uncomment the line below and set the port:
           # port: ${{ secrets.FTP_PORT }}
