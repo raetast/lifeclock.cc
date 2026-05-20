@@ -7,6 +7,7 @@ const minuteHand = document.getElementById("minute-hand");
 const dayNightDisk = document.getElementById("day-night-disk");
 const clockCaption = document.getElementById("clock-caption");
 const weeksLivedHeading = document.getElementById("weeks-lived-heading");
+const lifeProgressHeading = document.getElementById("life-progress-heading");
 const lifeCalendarHeading = document.getElementById("life-calendar-heading");
 const lifeGrid = document.getElementById("life-grid");
 const lifeBoxes = document.getElementById("life-boxes");
@@ -46,6 +47,9 @@ const BASE_LIFE_BOX_GAP = 2;
 const CANVAS_FONT_FAMILY = '"Inter", "Helvetica Neue", Arial, sans-serif';
 const PENDULUM_SWAY_DURATION_MS = 1000;
 const PENDULUM_CENTER_OFFSET_MS = PENDULUM_SWAY_DURATION_MS / 2;
+const MOBILE_NOTABLE_QUERY = "(max-width: 639px)";
+const NON_DESKTOP_NOTABLE_QUERY = "(max-width: 1023px)";
+const RESULT_DOB_STORAGE_KEY = "lifeClock:lastDob";
 let flipSettleTimer = null;
 let flipStartTimer = null;
 let clockMotionTimer = null;
@@ -68,6 +72,40 @@ requestAnimationFrame(() => {
   document.body.classList.add("is-pendulum-ready");
 });
 
+function matchesMediaQuery(query) {
+  return typeof window.matchMedia === "function" && window.matchMedia(query).matches;
+}
+
+function shouldDisableNotableTooltips() {
+  return matchesMediaQuery(MOBILE_NOTABLE_QUERY);
+}
+
+function shouldUseHoverNotableTooltips() {
+  return (
+    !matchesMediaQuery(NON_DESKTOP_NOTABLE_QUERY) &&
+    matchesMediaQuery("(hover: hover) and (pointer: fine)")
+  );
+}
+
+function shouldUseCompactLifeCopy() {
+  return matchesMediaQuery(MOBILE_NOTABLE_QUERY);
+}
+
+function rememberResultDob(value) {
+  try {
+    sessionStorage.setItem(RESULT_DOB_STORAGE_KEY, value);
+  } catch (err) {
+    // Ignore storage failures; the result still renders for this page load.
+  }
+}
+
+function getRememberedResultDob() {
+  try {
+    return sessionStorage.getItem(RESULT_DOB_STORAGE_KEY) || "";
+  } catch (err) {
+    return "";
+  }
+}
 
 function calculateAgeYears(dateValue) {
   const birth = new Date(dateValue);
@@ -365,11 +403,16 @@ function updateClock(ratio, options = {}) {
   );
   const beyondNote =
     visualState.dayOffset > 0 ? "Beyond average life expectancy. " : "";
-  clockCaption.innerHTML =
-    `${beyondNote}Visualization based on a ${lifeExpectancyYears}-year lifespan. (${EXPECTANCY_SOURCE}) ` +
-    `Inspired by Tim Urban's "Your Life in Weeks" from Wait But Why. ` +
-    `Lifespan references from <a href="https://www.wikidata.org/" target="_blank" rel="noopener">Wikidata</a> and ` +
-    `<a href="https://www.wikipedia.org/" target="_blank" rel="noopener">Wikipedia</a>.`;
+  if (shouldUseCompactLifeCopy()) {
+    clockCaption.textContent =
+      `${beyondNote}Visualization based on a ${lifeExpectancyYears}-year lifespan.`;
+  } else {
+    clockCaption.innerHTML =
+      `${beyondNote}Visualization based on a ${lifeExpectancyYears}-year lifespan. (${EXPECTANCY_SOURCE}) ` +
+      `Inspired by Tim Urban's "Your Life in Weeks" from Wait But Why. ` +
+      `Lifespan references from <a href="https://www.wikidata.org/" target="_blank" rel="noopener">Wikidata</a> and ` +
+      `<a href="https://www.wikipedia.org/" target="_blank" rel="noopener">Wikipedia</a>.`;
+  }
   clockPanel.hidden = false;
   clockPanel.classList.add("is-visible");
 
@@ -567,6 +610,13 @@ function updateLifeGrid(ageYears, dobDate) {
   lifeGrid.classList.add("is-visible");
   if (weeksLivedHeading) {
     weeksLivedHeading.textContent = `${weeksLived.toLocaleString()} weeks lived (${daysLived.toLocaleString()} days)`;
+  }
+  if (lifeProgressHeading) {
+    const lifePercent = Math.min(
+      999.9,
+      (agePosition.displayedWeeks / expectancyWeeks) * 100
+    );
+    lifeProgressHeading.textContent = `${lifePercent.toFixed(1)}% of a ${lifeExpectancyYears}-year life`;
   }
   updateResultHeadings();
   lastGridStats = {
@@ -1745,6 +1795,7 @@ function unpinWeekTooltip() {
 
 if (weekTooltip && lifeBoxes) {
   lifeBoxes.addEventListener("pointerover", (event) => {
+    if (!shouldUseHoverNotableTooltips() || shouldDisableNotableTooltips()) return;
     if (pinnedTooltipBox) return;
     rememberPointer(event);
     const target = event.target.closest(".life-box");
@@ -1757,6 +1808,7 @@ if (weekTooltip && lifeBoxes) {
   });
 
   lifeBoxes.addEventListener("pointerout", (event) => {
+    if (!shouldUseHoverNotableTooltips() || shouldDisableNotableTooltips()) return;
     if (pinnedTooltipBox) return;
     rememberPointer(event);
     const target = event.target.closest(".life-box");
@@ -1770,6 +1822,14 @@ if (weekTooltip && lifeBoxes) {
 
   window.addEventListener("pointermove", (event) => {
     rememberPointer(event);
+    if (shouldDisableNotableTooltips()) {
+      unpinWeekTooltip();
+      return;
+    }
+    if (!shouldUseHoverNotableTooltips()) {
+      if (!pinnedTooltipBox) hideHoverTooltip();
+      return;
+    }
     if (weekTooltip.hidden) return;
     syncHoverTooltipVisibility();
     if (weekTooltip.hidden) return;
@@ -1786,6 +1846,10 @@ if (weekTooltip && lifeBoxes) {
   });
 
   lifeBoxes.addEventListener("click", (event) => {
+    if (shouldDisableNotableTooltips()) {
+      unpinWeekTooltip();
+      return;
+    }
     const target = event.target.closest(".life-box");
     if (!target) return;
     if (pinnedTooltipBox && pinnedTooltipBox !== target) {
@@ -1798,6 +1862,7 @@ if (weekTooltip && lifeBoxes) {
   });
 
   lifeBoxes.addEventListener("keydown", (event) => {
+    if (shouldDisableNotableTooltips()) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     const target = event.target.closest(".life-box");
     if (!target) return;
@@ -1892,6 +1957,7 @@ function renderFromDob(value) {
   hideDobError();
   const dobDate = validation.date;
   const ageYears = calculateAgeYears(dobDate);
+  rememberResultDob(formatDobInput(value));
   lastDobDate = dobDate;
   const ratio = ageYears / lifeExpectancyYears;
   const shouldDeferClockMotion = !document.body.classList.contains("has-results");
@@ -2264,4 +2330,11 @@ initShareTitleWave();
 if (QA_MODE && !document.body.classList.contains("has-results")) {
   applyQaDefaults();
   renderFromDob(dobInput.value);
+} else if (!document.body.classList.contains("has-results")) {
+  const rememberedDob = getRememberedResultDob();
+  if (rememberedDob) {
+    dobInput.value = rememberedDob;
+    syncDobValue();
+    renderFromDob(dobInput.value);
+  }
 }
